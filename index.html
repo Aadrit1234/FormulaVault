@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Formula Vault — JEE Formula Reference</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/cards.css">
+<link rel="stylesheet" href="css/features.css">
+<script>
+function frac(n,d){ return '<span class="frac"><span class="num">'+n+'</span><span class="den">'+d+'</span></span>'; }
+</script>
+</head>
+<body>
+
+<div class="bg">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 6.5V17.5L12 22L20 17.5V6.5L12 2Z" stroke="white" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 2V22M4 6.5L20 17.5M20 6.5L4 17.5" stroke="white" stroke-width="1" stroke-opacity="0.55"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Formula Vault</h1>
+        <p>JEE Main &amp; Advanced formula reference</p>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search" type="text" placeholder="Search everything — formulas, derivations & laws (typo-friendly)…" autocomplete="off" spellcheck="false">
+      <button id="clearSearch" aria-label="Clear search">✕</button>
+    </div>
+    <div class="count-pill" id="countPill">0 formulas</div>
+    <div class="head-actions">
+      <button class="hbtn glass" id="fvBtnFavs" title="Bookmarked formulas">★<span class="hbadge" id="fvFavCount"></span></button>
+      <button class="hbtn glass" id="fvBtnStats" title="Progress dashboard">📊</button>
+      <button class="hbtn glass ai" id="fvBtnTutor" title="Open AI Tutor">✦ AI Tutor</button>
+    </div>
+    <button class="theme-toggle glass" id="themeToggle" aria-label="Toggle light and dark mode">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.3" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.5V5M12 19V21.5M4.5 12H2M22 12H19.5M5.6 5.6L7.3 7.3M18.4 18.4L16.7 16.7M18.4 5.6L16.7 7.3M5.6 18.4L7.3 16.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none"><path d="M20 14.3A8.4 8.4 0 1 1 9.7 4a7 7 0 0 0 10.3 10.3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <section class="hero glass" id="fvHero">
+    <div class="hero-left">
+      <div class="hero-badge">⚡ JEE 2026 Edition</div>
+      <h2>Master every formula.<br><span>Retain it forever.</span></h2>
+      <p>Interactive flashcards, an AI tutor, smart calculators, printable revision sheets and mastery tracking — your entire JEE revision arsenal in one place.</p>
+      <div class="hero-cta">
+        <button class="hero-btn primary" data-open="tutor">✦ Ask AI Tutor</button>
+        <button class="hero-btn" data-open="calc">🧮 Calculators</button>
+        <button class="hero-btn" data-open="study">🃏 Study Mode</button>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hstat"><b id="hTotal">0</b><span>Formulas</span></div>
+      <div class="hstat"><b id="hDeriv">0</b><span>Derivations</span></div>
+      <div class="hstat"><b id="hLaws">0</b><span>Laws</span></div>
+      <div class="hstat"><b id="hStreak">0</b><span>Day streak 🔥</span></div>
+    </div>
+  </section>
+
+  <div class="controls" id="controlsWrap">
+    <div class="seg mode-seg glass" id="modeSeg">
+      <button data-mode="formulas" class="active">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+        Formulas
+      </button>
+      <button data-mode="derivations">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 4H12L18 10V20H4V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 4V10H18" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 13H15M7 16H15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Derivations
+      </button>
+      <button data-mode="laws">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3L4 7V9C4 14 7.5 18.5 12 20C16.5 18.5 20 14 20 9V7L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 11.5L11 13.5L15 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Laws
+      </button>
+    </div>
+
+    <div class="seg class-seg glass" id="classSeg">
+      <button data-class="11" class="active">Class 11</button>
+      <button data-class="12">Class 12</button>
+    </div>
+
+    <div class="seg subject-seg glass" id="subjectSeg">
+      <button data-subject="physics" class="active">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="2.4" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="4.2" stroke="currentColor" stroke-width="1.5"/><ellipse cx="12" cy="12" rx="10" ry="4.2" stroke="currentColor" stroke-width="1.5" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.2" stroke="currentColor" stroke-width="1.5" transform="rotate(120 12 12)"/></svg>
+        Physics
+      </button>
+      <button data-subject="chemistry">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M9 2H15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 3V9.5L4.5 19C4 19.9 4.6 21 5.6 21H18.4C19.4 21 20 19.9 19.5 19L14 9.5V3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 15H16.5" stroke="currentColor" stroke-width="1.4"/></svg>
+        Chemistry
+      </button>
+      <button data-subject="math">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 6H20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6 6L13 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13 18L15 14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18.5" cy="6" r="1.3" fill="currentColor"/></svg>
+        Mathematics
+      </button>
+    </div>
+
+    <div class="chips glass" id="chapterChips" style="padding:8px;"></div>
+  </div>
+
+
+  <div id="grid"></div>
+
+  <div id="fvToasts"></div>
+  <div id="fvOverlayHost"></div>
+
+  <footer class="foot">Data covers high-yield JEE Main &amp; Advanced chapters. Built for quick pre-exam recall.</footer>
+</div>
+
+<script src="js/data/formulas-11-physics.js"></script>
+<script src="js/data/formulas-11-chemistry.js"></script>
+<script src="js/data/formulas-11-math.js"></script>
+<script src="js/data/formulas-12-physics.js"></script>
+<script src="js/data/formulas-12-chemistry.js"></script>
+<script src="js/data/formulas-12-math.js"></script>
+<script src="js/data/derivations-11-physics.js"></script>
+<script src="js/data/derivations-12-physics.js"></script>
+<script src="js/data/derivations-11-chemistry.js"></script>
+<script src="js/data/derivations-12-chemistry.js"></script>
+<script src="js/data/derivations-11-math.js"></script>
+<script src="js/data/derivations-12-math.js"></script>
+<script src="js/data/laws-11-physics.js"></script>
+<script src="js/data/laws-12-physics.js"></script>
+<script src="js/data/laws-11-chemistry.js"></script>
+<script src="js/data/laws-12-chemistry.js"></script>
+<script src="js/data/laws-11-math.js"></script>
+<script src="js/data/laws-12-math.js"></script>
+<script src="js/core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

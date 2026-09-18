@@ -1,0 +1,18 @@
+# Secrets — never push API keys
+apikey.txt
+*.key
+.env
+
+# Leftover build artifacts / icon caches (not referenced by the app)
+.freebuff/
+_icons.json
+_icons_clean.json
+_lucide.js
+_manifest.txt
+_patch2.py
+
+# OS / editor junk
+Thumbs.db
+Desktop.ini
+.DS_Store
+node_modules/

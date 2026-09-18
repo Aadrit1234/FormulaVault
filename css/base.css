@@ -1,0 +1,128 @@
+  :root{
+    --bg-0:#060a13;
+    --bg-1:#0b1424;
+    --glass-fill: rgba(186,209,255,0.055);
+    --glass-fill-strong: rgba(186,209,255,0.10);
+    --glass-border: rgba(198,218,255,0.14);
+    --glass-border-strong: rgba(198,218,255,0.28);
+    --text-hi: rgba(240,246,255,0.97);
+    --text-mid: rgba(210,224,250,0.68);
+    --text-low: rgba(196,213,245,0.44);
+    --shadow-panel: 0 8px 32px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.07);
+    --shadow-header: 0 12px 32px rgba(0,0,0,0.42);
+    --header-bg: rgba(6,10,20,0.55);
+    --input-bg: rgba(186,209,255,0.055);
+    --input-bg-focus: rgba(186,209,255,0.10);
+    --soft-fill: rgba(186,209,255,0.05);
+    --soft-fill-hover: rgba(186,209,255,0.09);
+    --soft-border: rgba(198,218,255,0.10);
+    --pill-bg: rgba(186,209,255,0.05);
+    --blob1:#15306B;
+    --blob2:#0B5E82;
+    --blob3:#3A3DAE;
+    --blob-opacity:0.55;
+
+    --blue:#1D64D8;
+    --blue-rgb:29,100,216;
+    --cyan:#0E93AE;
+    --cyan-rgb:14,147,174;
+    --indigo:#5457D9;
+    --indigo-rgb:84,87,217;
+    --amber:#FF9F0A;
+
+    --radius-l: 26px;
+    --radius-m: 18px;
+    --radius-s: 12px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  html[data-theme="light"]{
+    --bg-0:#f1f6fd;
+    --bg-1:#dfeafc;
+    --glass-fill: rgba(255,255,255,0.55);
+    --glass-fill-strong: rgba(255,255,255,0.72);
+    --glass-border: rgba(60,110,190,0.16);
+    --glass-border-strong: rgba(60,110,190,0.32);
+    --text-hi: #0B1E3D;
+    --text-mid: rgba(11,30,61,0.66);
+    --text-low: rgba(11,30,61,0.44);
+    --shadow-panel: 0 8px 28px rgba(30,64,120,0.14), inset 0 1px 0 rgba(255,255,255,0.65);
+    --shadow-header: 0 10px 26px rgba(30,64,120,0.12);
+    --header-bg: rgba(238,244,252,0.68);
+    --input-bg: rgba(255,255,255,0.55);
+    --input-bg-focus: rgba(255,255,255,0.75);
+    --soft-fill: rgba(30,64,120,0.045);
+    --soft-fill-hover: rgba(30,64,120,0.08);
+    --soft-border: rgba(30,64,120,0.10);
+    --pill-bg: rgba(255,255,255,0.55);
+    --blob1:#BFDBFE;
+    --blob2:#A6E6F2;
+    --blob3:#D2D4FB;
+    --blob-opacity:0.75;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background: var(--bg-0);
+    color: var(--text-hi);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x:hidden;
+    transition: background-color .4s var(--ease), color .4s var(--ease);
+  }
+
+  /* ---------- animated ambient background ---------- */
+  .bg{
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    background: radial-gradient(130% 95% at 50% -10%, var(--bg-1) 0%, var(--bg-0) 55%);
+    transition: background .4s var(--ease);
+  }
+  .blob{
+    position:absolute;
+    border-radius:50%;
+    filter: blur(110px);
+    opacity: var(--blob-opacity);
+    will-change: transform;
+    transition: background .5s var(--ease), opacity .5s var(--ease);
+  }
+  .blob-1{
+    width:52vw; height:52vw; max-width:760px; max-height:760px;
+    background: radial-gradient(circle at 30% 30%, var(--blob1), transparent 70%);
+    top:-14vw; left:-10vw;
+    animation: drift1 26s var(--ease) infinite alternate;
+  }
+  .blob-2{
+    width:46vw; height:46vw; max-width:680px; max-height:680px;
+    background: radial-gradient(circle at 60% 40%, var(--blob2), transparent 70%);
+    bottom:-16vw; right:-8vw;
+    animation: drift2 32s var(--ease) infinite alternate;
+  }
+  .blob-3{
+    width:36vw; height:36vw; max-width:560px; max-height:560px;
+    background: radial-gradient(circle at 50% 50%, var(--blob3), transparent 72%);
+    top:38vh; left:38vw;
+    opacity: calc(var(--blob-opacity) - 0.15);
+    animation: drift3 38s var(--ease) infinite alternate;
+  }
+  @keyframes drift1{ 0%{transform:translate(0,0) scale(1);} 100%{transform:translate(6vw,8vh) scale(1.12);} }
+  @keyframes drift2{ 0%{transform:translate(0,0) scale(1);} 100%{transform:translate(-7vw,-6vh) scale(1.08);} }
+  @keyframes drift3{ 0%{transform:translate(0,0) scale(1);} 100%{transform:translate(-5vw,7vh) scale(1.18);} }
+  @media (prefers-reduced-motion: reduce){
+    .blob{ animation: none !important; }
+  }
+
+  /* ---------- glass base ---------- */
+  .glass{
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-panel);
+    transition: background-color .4s var(--ease), border-color .4s var(--ease), box-shadow .4s var(--ease);
+  }
