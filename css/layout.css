@@ -274,7 +274,8 @@
     header.top{ padding: 10px 12px 12px; margin-bottom: 14px; }
     .top-row{ gap: 8px; row-gap: 9px; }
     .brand-mark{ width: 34px; height: 34px; border-radius: 10px; }
-    .brand-text h1{ font-size: 15.5px; }
+    .brand-text{ min-width: 0; }
+    .brand-text h1{ font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .search-wrap{ order: 6; flex: 1 1 100%; min-width: 0; }
     #search{ font-size: 16px; padding: 11px 14px 11px 38px; }
     .count-pill{ font-size: 11px; padding: 6px 10px; }
@@ -285,8 +286,10 @@
     #grid{ gap: 14px; }
     .chapter-heading{ margin: 18px 0 2px; }
   }
-  @media (max-width: 380px){
+  @media (max-width: 480px){
     .count-pill{ display: none; }
+  }
+  @media (max-width: 380px){
     .brand-text h1{ font-size: 15px; }
   }
   @media (pointer: coarse){

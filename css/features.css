@@ -326,8 +326,9 @@
   @media (max-width: 640px){
     .fv-ov{ padding: calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
     .fv-ov.drawer, .fv-ov.study{ padding:0; }
-    .head-actions .hbtn{ height:40px; }
-    .head-actions .hbtn:not(.ai){ min-width:36px; padding:0 9px; font-size:12px; }
+    .head-actions{ gap:5px; }
+    .head-actions .hbtn{ height:38px; min-width:36px; padding:0 8px; }
+    .head-actions .hbtn:not(.ai){ font-size:12px; }
     .head-actions .lbl{ display:none; }
 
     .fv-modal-head{ padding:12px 14px 10px; }
@@ -360,7 +361,7 @@
     .fav-row{ padding:10px; }
 
     /* prevent iOS auto-zoom on focus */
-    #search, .fv-chat-input textarea, .calc-field input, .ai-key-in input, .fv-sel{ font-size:16px; }
+    #search, .fv-chat-input textarea, .calc-field input, .ai-key-in input, .fv-sel, #graphExpr{ font-size:16px; }
 
     /* History sidebar overlays the chat on phones */
     .fv-ov.drawer.threads-open .fv-threads{

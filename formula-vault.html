@@ -804,7 +804,8 @@
     header.top{ padding: 10px 12px 12px; margin-bottom: 14px; }
     .top-row{ gap: 8px; row-gap: 9px; }
     .brand-mark{ width: 34px; height: 34px; border-radius: 10px; }
-    .brand-text h1{ font-size: 15.5px; }
+    .brand-text{ min-width: 0; }
+    .brand-text h1{ font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .search-wrap{ order: 6; flex: 1 1 100%; min-width: 0; }
     #search{ font-size: 16px; padding: 11px 14px 11px 38px; }
     .count-pill{ font-size: 11px; padding: 6px 10px; }
@@ -815,8 +816,10 @@
     #grid{ gap: 14px; }
     .chapter-heading{ margin: 18px 0 2px; }
   }
-  @media (max-width: 380px){
+  @media (max-width: 480px){
     .count-pill{ display: none; }
+  }
+  @media (max-width: 380px){
     .brand-text h1{ font-size: 15px; }
   }
   @media (pointer: coarse){
@@ -1138,8 +1141,9 @@
   @media (max-width: 640px){
     .fv-ov{ padding: calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
     .fv-ov.drawer, .fv-ov.study{ padding:0; }
-    .head-actions .hbtn{ height:40px; }
-    .head-actions .hbtn:not(.ai){ min-width:36px; padding:0 9px; font-size:12px; }
+    .head-actions{ gap:5px; }
+    .head-actions .hbtn{ height:38px; min-width:36px; padding:0 8px; }
+    .head-actions .hbtn:not(.ai){ font-size:12px; }
     .head-actions .lbl{ display:none; }
 
     .fv-modal-head{ padding:12px 14px 10px; }
@@ -1171,8 +1175,11 @@
 
     .fav-row{ padding:10px; }
 
+    /* palette (Ctrl+K) is desktop-only */
+    #fvBtnPalette{ display:none; }
+
     /* prevent iOS auto-zoom on focus */
-    #search, .fv-chat-input textarea, .calc-field input, .ai-key-in input, .fv-sel{ font-size:16px; }
+    #search, .fv-chat-input textarea, .calc-field input, .ai-key-in input, .fv-sel, #graphExpr{ font-size:16px; }
 
     /* History sidebar overlays the chat on phones */
     .fv-ov.drawer.threads-open .fv-threads{
