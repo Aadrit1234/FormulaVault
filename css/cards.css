@@ -366,3 +366,17 @@
     display:inline-block;
     margin-bottom: 10px;
   }
+
+  /* ---------- mobile / touch ---------- */
+  .face-back{ -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  @media (max-width: 520px){
+    .face{ padding: 16px 15px 12px; }
+    .card-title{ font-size: 14px; }
+    .card-eq{ font-size: 18px; }
+    .deriv-card, .law-card{ padding: 14px 15px; }
+    .deriv-steps li{ padding-left: 28px; }
+  }
+  @media (pointer: coarse){
+    .card-outer:hover .card-inner{ transform: none; }
+    .card-outer:hover .face{ border-color: var(--glass-border); }
+  }

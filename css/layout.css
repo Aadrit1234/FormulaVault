@@ -267,3 +267,30 @@
     .card-outer{ height: 240px; }
     .brand-text p{ display:none; }
   }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 640px){
+    .shell{ padding: 12px 12px calc(46px + env(safe-area-inset-bottom)); }
+    header.top{ padding: 10px 12px 12px; margin-bottom: 14px; }
+    .top-row{ gap: 8px; row-gap: 9px; }
+    .brand-mark{ width: 34px; height: 34px; border-radius: 10px; }
+    .brand-text h1{ font-size: 15.5px; }
+    .search-wrap{ order: 6; flex: 1 1 100%; min-width: 0; }
+    #search{ font-size: 16px; padding: 11px 14px 11px 38px; }
+    .count-pill{ font-size: 11px; padding: 6px 10px; }
+    .theme-toggle{ width: 36px; height: 36px; }
+    .controls{ margin: 12px 0 16px; gap: 10px; }
+    .seg button{ padding: 9px 15px; font-size: 13px; }
+    .chip{ font-size: 12.5px; padding: 8px 13px; }
+    #grid{ gap: 14px; }
+    .chapter-heading{ margin: 18px 0 2px; }
+  }
+  @media (max-width: 380px){
+    .count-pill{ display: none; }
+    .brand-text h1{ font-size: 15px; }
+  }
+  @media (pointer: coarse){
+    .theme-toggle{ width: 40px; height: 40px; }
+    .seg button{ padding: 9px 16px; }
+    .chip{ padding: 9px 15px; }
+  }

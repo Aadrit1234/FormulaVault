@@ -406,7 +406,7 @@ function openTutor(){
   function renderThreads(){
     const list=threads.slice().sort(function(a,b){ return b.updated-a.updated; });
     thrEl.innerHTML=
-      '<div class="fv-threads-head"><b>Conversations</b><button class="fv-txtbtn" id="fvNewInList">New chat</button></div>'+
+      '<div class="fv-threads-head"><b>Conversations</b><span class="fv-threads-acts"><button class="fv-txtbtn" id="fvNewInList">New chat</button><button class="fv-icon-btn" id="fvCloseThreads" title="Close conversations" aria-label="Close conversations">×</button></span></div>'+
       (list.length ? list.map(function(th){
         return '<div class="fv-thread'+(th.id===activeThread.id?' active':'')+'" data-tid="'+th.id+'">'+
           '<div class="fv-thread-main"><b>'+escHtml(th.title||'Chat')+'</b><span>'+new Date(th.updated).toLocaleString(undefined,{month:'short',day:'numeric'})+' · '+th.msgs.length+' msg'+(th.msgs.length===1?'':'s')+'</span></div>'+
@@ -415,6 +415,7 @@ function openTutor(){
     $$('[data-tid]',thrEl).forEach(function(el){ el.onclick=function(){ switchThread(el.dataset.tid); }; });
     $$('[data-tdel]',thrEl).forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); deleteThread(b.dataset.tdel); }; });
     const nb=thrEl.querySelector('#fvNewInList'); if(nb){ nb.onclick=newThread; }
+    const cb=thrEl.querySelector('#fvCloseThreads'); if(cb){ cb.onclick=function(){ w.classList.remove('threads-open'); }; }
   }
   function deleteThread(id){
     threads=threads.filter(function(th){ return th.id!==id; });
