@@ -5819,16 +5819,20 @@ let chatMsgs=(function(){ try{ const c=store.get('chat',[]); return Array.isArra
 let busy=false;
 function tutorSystem(){
   const subj=SUBJ[state.subject], cls=state.cls;
-  const ch=(state.chapter&&state.chapter!=='all') ? ' currently studying the chapter "'+state.chapter+'"' : '';
+  const browsing=(state.chapter&&state.chapter!=='all');
+  const ctx=browsing
+    ? 'The user is browsing the chapter "'+state.chapter+'" ('+subj+', Class '+cls+') in the vault — use it only as a hint about what they might ask.'
+    : 'The user is browsing a '+subj+' formula vault for Class '+cls+'.';
   return [
-    'You are Vault AI, a warm, patient teaching tutor for CBSE Class 11/12 and JEE Main & Advanced (India). Today you are tutoring '+subj+' for Class '+cls+ch+'.',
-    'TEACHING METHOD — teach the thinking, not just the formula. For each topic:',
-    '1) INTUITION first: open with a short everyday analogy that makes the idea click before any mathematics.',
-    '2) Then give the formula/law and explain WHY each symbol is there and what the equation is really saying.',
-    '3) EXAM PATTERN: note how JEE Main usually asks it vs where Advanced goes deeper or sets trap options; give a short step-by-step worked numerical.',
-    '4) MISCONCEPTIONS: name the classic mistake students make and the warning sign that they are about to fall into it.',
+    'You are Vault AI, a warm, patient, versatile teaching tutor for ANY subject and ANY level — sciences (physics, chemistry, biology), mathematics, engineering, computer science and programming, economics, history, languages, exam prep, and everyday concepts. '+ctx+' Treat that as a soft hint only, never as a restriction.',
+    'The user can ask about anything — a concept, a formula, a solved example, homework, career advice, or a random curiosity. Decide the topic and level from their question itself; never assume a subject or class, and never say a topic is outside your scope. If they ask about '+subj+' or the chapter they are browsing, feel free to use that context.',
+    'TEACHING METHOD — teach the thinking, not just the answer. For each topic:',
+    '1) INTUITION first: open with a short everyday analogy that makes the idea click before any mathematics or jargon.',
+    '2) Then give the formula, law, or rule and explain WHY each symbol or part is there and what it is really saying.',
+    '3) EXAM & APPLICATION: if the topic is commonly tested (JEE/CBSE, SAT, university courses, coding interviews, etc.), note typical question styles and traps and give a short step-by-step worked example. Otherwise give a concrete real-world application.',
+    '4) MISCONCEPTIONS: name the classic mistake learners make and the warning sign that they are about to fall into it.',
     'Match the student\'s level: if they ask something basic, explain simply; if they ask advanced, go deep but stay structured. When a student makes a conceptual error, correct it gently and affirm the part they got right.',
-    'Formatting: math in LaTeX with \\( ... \\) inline and \\[ ... \\] display; bold key terms with **term**. Use short paragraphs and bullets, not walls of text.',
+    'Formatting: mathematics in LaTeX with \\( ... \\) inline and \\[ ... \\] display; bold key terms with **term**. Use short paragraphs and bullets, not walls of text.',
     'End most answers with ONE short follow-up question that helps them apply the idea (for example a quick variation to try) — but only if the reply ends cleanly and the student has not asked for something else.',
     'Length: under 300 words unless the student asks for full depth. Be encouraging, precise, and never condescending.'
   ].join(' ');
@@ -5852,14 +5856,14 @@ function tutorHTML(){
     '</div></div>'+
     '<div class="fv-chat" id="fvChat"></div>'+
     '<div class="fv-suggest" id="fvSuggest"></div>'+
-    '<div class="fv-chat-input"><textarea id="fvChatText" rows="1" placeholder="Ask anything — explain Bohr model, trick for SHM…"></textarea><button class="fv-send" id="fvSend">➤</button></div>';
+    '<div class="fv-chat-input"><textarea id="fvChatText" rows="1" placeholder="Ask anything — any subject, any class…"></textarea><button class="fv-send" id="fvSend">➤</button></div>';
 }
 function openAISettings(){
   const aiKeys=settings.aiKeys||{groq:'',google:'',openrouter:''};
   const w=openOverlay(
     '<div class="fv-modal-head"><div><h3>⚙ Vault AI Settings</h3><span class="ctx-pill">Teaching tutor engine</span></div><button class="fv-icon-btn" data-close>✕</button></div>'+
     '<div class="fv-modal-body">'+
-      '<p class="fv-ai-note">'+(AI.serverMode()?'This deployed version uses the site\'s built-in API keys — the AI tutor already works, no setup needed. You may still add your own key below as a personal backup. ':'Vault AI is your specialised teaching tutor. Paste one (or more) free API key below. ')+'Keys are saved <b>only on this device</b> and are never uploaded anywhere. Auto mode tries every provider that has a key.</p>'+
+      '<p class="fv-ai-note">'+(AI.serverMode()?'This deployed version uses the site\'s built-in API keys — the AI tutor already works, no setup needed. You may still add your own key below as a personal backup. ':'Vault AI is your tutor for any subject and any class. Paste one (or more) free API key below. ')+'Keys are saved <b>only on this device</b> and are never uploaded anywhere. Auto mode tries every provider that has a key.</p>'+
       (!AI.serverMode()&&AI.configured().length===0 ? '<div class="fv-err" style="margin-bottom:12px">⚠ No provider is set up yet — add at least one key.</div>' : '')+
       ['groq','google','openrouter'].map(function(p){
         return '<div class="ai-key-row" data-p="'+p+'">'+
@@ -5910,8 +5914,8 @@ function openTutor(){
   function setStatus(el,s){ let st=el.querySelector('.fv-stream-status'); if(!st){ st=document.createElement('div'); st.className='fv-stream-status'; el.appendChild(st);} st.innerHTML='◌ '+escHtml(s); }
   function renderSug(){
     const ch = state.chapter!=='all'?state.chapter:null;
-    const sug = ch ? ['Explain '+ch+' simply','Top JEE tricks for '+ch,'Common mistakes in '+ch,'3 practice problems on '+ch]
-                   : ['Revision plan for '+SUBJ[state.subject],'Most important '+SUBJ[state.subject]+' chapters for JEE','Make a 1-page formula sheet'];
+    const sug = ch ? ['Explain '+ch+' simply','Top tricks for '+ch,'Common mistakes in '+ch,'3 practice problems on '+ch]
+                   : ['Explain a concept from '+SUBJ[state.subject],'Quiz me on '+SUBJ[state.subject],'Help me with a homework problem','Make a 1-page revision plan'];
     const box=w.querySelector('#fvSuggest');
     box.innerHTML=sug.map(s=>'<button class="fv-sug">'+escHtml(s)+'</button>').join('');
     $$('.fv-sug',box).forEach(b=>b.onclick=()=>{ w.querySelector('#fvChatText').value=b.textContent; send(); });
@@ -5947,10 +5951,10 @@ function openTutor(){
   ta.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
   ta.addEventListener('input',()=>{ ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px'; });
   w.querySelector('#fvProv').onchange=e=>{ settings.provider=e.target.value; store.set('settings',settings); toast('AI provider: '+e.target.value); };
-  w.querySelector('#fvNewChat').onclick=()=>{ chatMsgs=[]; store.set('chat',[]); chat.innerHTML=''; add('ai','Fresh start! ✦ What are we revising today?'); renderSug(); };
+  w.querySelector('#fvNewChat').onclick=()=>{ chatMsgs=[]; store.set('chat',[]); chat.innerHTML=''; add('ai','Fresh start! ✦ What shall we learn today?'); renderSug(); };
   if(chatMsgs.length) chatMsgs.forEach(m=>add(m.role==='assistant'?'ai':'user', m.content));
   else if(AI.serverMode()||AI.configured().length)
-    add('ai', "Hey! I'm Vault AI ✦ — your JEE teaching tutor. I can explain formulas, work through derivations, quiz you orally, or plan your revision. What's confusing you today?");
+    add('ai', "Hey! I'm Vault AI ✦ — your tutor for any subject, any class, any level. Explain formulas, work through problems, quiz you, or plan revision — physics, chemistry, math, coding, whatever you're stuck on. What's confusing you today?");
   else add('ai', 'Welcome! I\'m Vault AI ✦. To let me teach you, add a free API key (Groq, Google or OpenRouter) in ⚙ AI Settings. Tap ⚙ above and paste any key, then hit Save.');
   renderSug();
   setTimeout(()=>ta.focus(),150);
@@ -5964,7 +5968,7 @@ function openExplain(c){
     '<div class="fv-modal-body"><div class="qq" style="margin:0 0 10px">'+escHtml(c.t)+'</div><div class="calc-out" style="margin-bottom:12px">'+c.eq+'</div><div id="fvExOut"><div class="fv-typing"><i></i><i></i><i></i></div></div></div>'+
     '<div class="fv-modal-foot"><button class="fv-btn" data-close>Close</button><button class="fv-btn primary" id="fvExMore">Go deeper in Tutor →</button></div>','modal');
   const out=w.querySelector('#fvExOut');
-  const prompt='Explain this JEE '+SUBJ[c.subject]+' formula for a Class '+c.cls+' student.\nTitle: '+c.t+'\nFormula: '+FV.strip(c.eq)+
+  const prompt='Explain this '+SUBJ[c.subject]+' formula for a Class '+c.cls+' student.\nTitle: '+c.t+'\nFormula: '+FV.strip(c.eq)+
     (c.sym&&c.sym.length?'\nSymbols: '+c.sym.map(s=>s[0]+' = '+s[1]).join('; '):'')+
     (c.tip?'\nHint already known: '+c.tip:'')+
     '\nStructure: (1) the intuition, (2) when to use it in problems, (3) a tiny worked numerical example, (4) one common mistake to avoid. Max 220 words. LaTeX in \\( \\) Delimiters.';
