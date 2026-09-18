@@ -1,6 +1,35 @@
 (function(){
   "use strict";
 
+  const __L='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+  const __LE='</svg>';
+  const __IC={
+    star:__L+'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'+__LE,
+    starFilled:__L+'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" stroke="none"/>'+__LE,
+    sparkles:__L+'<path d="M12 3l1.9 5.6a2 2 0 0 0 1.3 1.3L20.8 12l-5.6 1.9a2 2 0 0 0-1.3 1.3L12 20.8l-1.9-5.6a2 2 0 0 0-1.3-1.3L3.2 12l5.6-1.9a2 2 0 0 0 1.3-1.3z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>'+__LE,
+    settings:__L+'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'+__LE,
+    history:__L+'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'+__LE,
+    messagePlus:__L+'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v6"/><path d="M9 11h6"/>'+__LE,
+    printer:__L+'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>'+__LE,
+    fileText:__L+'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>'+__LE,
+    bookmark:__L+'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>'+__LE,
+    moon:__L+'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'+__LE,
+    calculator:__L+'<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/>'+__LE,
+    layers:__L+'<path d="M12 2 4 7l8 5 8-5-8-5Z"/><path d="m17 11 3 2-8 5-8-5 3-2"/><path d="m17 16 3 2-8 5-8-5 3-2"/>'+__LE,
+    target:__L+'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'+__LE,
+    rocket:__L+'<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>'+__LE,
+    gauge:__L+'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>'+__LE,
+    zap:__L+'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>'+__LE,
+    wind:__L+'<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>'+__LE,
+    flask:__L+'<path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/>'+__LE,
+    fn:__L+'<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.5"/>'+__LE,
+    droplet:__L+'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>'+__LE,
+    x:__L+'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'+__LE
+  };
+  window.__I=__IC;
+  window.__STAR_OUT=__IC.star;
+  window.__STAR_FILL=__IC.starFilled;
+  window.__SPARK=__IC.sparkles;
 
   /* ============================= DATA ============================= */
   const DATA = (window.FVDATA || []);
@@ -253,8 +282,8 @@
         '<div class="card-inner">'+
           '<div class="face face-front" style="--accent-c:'+accent+'">'+
             '<div class="card-actions">'+
-              '<button class="card-btn fv-fav'+(window.__fvIsFav&&window.__fvIsFav(c)?' active':'')+'" data-fav="'+idx+'" title="Bookmark" aria-label="Bookmark formula">'+(window.__fvIsFav&&window.__fvIsFav(c)?'★':'☆')+'</button>'+
-              '<button class="card-btn fv-explain" data-explain="'+idx+'" title="Explain with AI" aria-label="Explain with AI">✦</button>'+
+              '<button class="card-btn fv-fav'+(window.__fvIsFav&&window.__fvIsFav(c)?' active':'')+'" data-fav="'+idx+'" title="Bookmark" aria-label="Bookmark formula">'+(window.__fvIsFav&&window.__fvIsFav(c)?window.__I.starFilled:window.__I.star)+'</button>'+
+              '<button class="card-btn fv-explain" data-explain="'+idx+'" title="Explain with AI" aria-label="Explain with AI">'+window.__I.sparkles+'</button>'+
             '</div>'+
             tag +
             '<div class="card-title">'+titleHTML+'</div>'+
@@ -407,7 +436,7 @@
       html = '<div class="empty-state"><h3>No matches for “'+escQ(q)+'”</h3><p>Even after typo-correction and symbol lookup, nothing matched. Try simpler words — like “projectile”, “pH”, or “lambda”.</p></div>';
     } else {
       if(res.fuzzy){
-        html += '<div class="deriv-note">✨ Typo-aware search — best matches for “'+escQ(q)+'” across <b>all classes &amp; subjects</b>.</div>';
+        html += '<div class="deriv-note">Typo-aware search — best matches for “'+escQ(q)+'” across <b>all classes &amp; subjects</b>.</div>';
       }
       if(cf.list.length){
         html += '<div class="chapter-heading"><h2>Formulas</h2><span>'+(cf.total>cf.list.length ? cf.list.length+' of '+cf.total+' · top matches' : cf.total+' found')+'</span></div>';

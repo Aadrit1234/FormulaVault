@@ -37,12 +37,12 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.rand
 
 function toast(msg, ms){
   const host=$('#fvToasts'); if(!host) return;
-  const d=document.createElement('div'); d.className='fv-toast'; d.innerHTML='<span>✦</span>'+escHtml(msg);
+  const d=document.createElement('div'); d.className='fv-toast'; d.innerHTML='<span>•</span>'+escHtml(msg);
   host.appendChild(d); requestAnimationFrame(()=>d.classList.add('show'));
   setTimeout(()=>{ d.classList.remove('show'); setTimeout(()=>d.remove(),350); }, ms||2600);
 }
-window.addEventListener('error', function(e){ try{ toast('⚠ '+(e.error&&e.error.message?e.error.message:(e.message||'Unexpected error'))); }catch(_){ } });
-window.addEventListener('unhandledrejection', function(e){ try{ toast('⚠ '+(e.reason&&e.reason.message?e.reason.message:'Promise failed')); }catch(_){ } });
+window.addEventListener('error', function(e){ try{ toast(e.error&&e.error.message?e.error.message:(e.message||'Unexpected error')); }catch(_){ } });
+window.addEventListener('unhandledrejection', function(e){ try{ toast(e.reason&&e.reason.message?e.reason.message:'Promise failed'); }catch(_){ } });
 function confetti(n){
   n=n||90; const colors=['#1D64D8','#0E93AE','#5457D9','#FF9F0A','#2fbf71','#FF375F'];
   for(let i=0;i<n;i++){ const p=document.createElement('i'); p.className='fv-confetti';
@@ -89,7 +89,7 @@ function closeOverlay(w){
 }
 
 /* ============ AI engine (Groq → Google → OpenRouter) — bring your own API key ============ */
-/* Keys are never baked into the code: you paste them in ⚙ AI Settings and they are
+/* Keys are never baked into the code: you paste them in AI Settings and they are
    saved only in this browser's localStorage (settings.aiKeys). Auto mode tries every
    provider that has a key configured. */
 const AI = (function(){
@@ -114,7 +114,7 @@ const AI = (function(){
   function hasKey(p){ return !!keyFor(p); }
   function configured(){ return ['groq','google','openrouter'].filter(hasKey); }
   function errNoKey(p){
-    const e=new Error('No '+LABEL[p]+' API key yet — get one free at '+HELP[p]+' and paste it in ⚙ AI Settings.');
+    const e=new Error('No '+LABEL[p]+' API key yet — get one free at '+HELP[p]+' and paste it in AI Settings.');
     e.code='AI_NO_KEY'; e.provider=p; return e;
   }
   function errBadKey(p, msg){
@@ -203,7 +203,7 @@ const AI = (function(){
       }
     }
     let order = settings.provider==='auto' ? configured() : (hasKey(settings.provider)?[settings.provider]:[]);
-    if(!order.length){ const e=new Error('No AI provider configured yet. Open ⚙ AI Settings and paste a free API key for Groq, Google or OpenRouter — it stays on your device.'); e.code='AI_NO_KEY'; throw e; }
+    if(!order.length){ const e=new Error('No AI provider configured yet. Open AI Settings and paste a free API key for Groq, Google or OpenRouter — it stays on your device.'); e.code='AI_NO_KEY'; throw e; }
     let streamed=false; let lastErr=null;
     const od = t=>{ streamed=true; if(o.onDelta) o.onDelta(t); };
     for(const p of order){
@@ -233,9 +233,10 @@ const AI = (function(){
 
   return { chat:chat, testKey:testKey, LABEL:LABEL, HELP:HELP, keyTips:keyTips, hasKey:hasKey, configured:configured, serverMode:serverMode };
 })();
+window.__AI = AI;
 
 function aiKeyErrHTML(msg){
-  return '<div class="fv-err">⚠ '+escHtml(msg)+' <button class="fv-btn primary" data-gokeys style="margin-top:8px">⚙ Add API key</button></div>';
+  return '<div class="fv-err">'+escHtml(msg)+' <button class="fv-btn primary" data-gokeys style="margin-top:8px">Add API key</button></div>';
 }
 function wireGoKeys(root){
   (root.querySelectorAll('[data-gokeys]')||[]).forEach(function(b){ b.onclick=function(){ if(root.classList.contains('fv-ov')) closeOverlay(root); else closeOverlay(); openAISettings(); }; });
@@ -257,8 +258,42 @@ function typeset(el){
   else loadMathJax().then(function(){ try{ if(window.MathJax&&window.MathJax.typesetPromise) window.MathJax.typesetPromise([el]); }catch(e){} });
 }
 
-/* ============ AI tutor drawer ============ */
-let chatMsgs=(function(){ try{ const c=store.get('chat',[]); return Array.isArray(c)?c.filter(function(m){ return m&&typeof m==='object'&&typeof m.role==='string'&&typeof m.content==='string'; }):[]; }catch(e){ return []; } })();
+/* ============ AI tutor drawer (multi-thread chat history) ============ */
+function cleanMsgs(a){ return Array.isArray(a)?a.filter(function(m){ return m&&typeof m==='object'&&typeof m.role==='string'&&typeof m.content==='string'; }):[]; }
+function threadTitleFrom(q){
+  const t=String(q||'').replace(/\s+/g,' ').trim();
+  return t ? (t.length>46?t.slice(0,46)+'…':t) : 'New chat';
+}
+let threads=(function(){
+  try{
+    const t=store.get('chats',null);
+    if(Array.isArray(t)) return t.filter(function(th){ return th&&typeof th==='object'&&typeof th.id==='string'&&Array.isArray(th.msgs); }).map(function(th){
+      return { id:th.id, title:typeof th.title==='string'&&th.title?th.title:'New chat', msgs:cleanMsgs(th.msgs), updated:Number(th.updated)||0 };
+    }).sort(function(a,b){ return b.updated-a.updated; });
+    const legacy=store.get('chat',[]);
+    if(Array.isArray(legacy)&&legacy.length) return [{ id:'t'+Date.now(), title:'Chat history', msgs:cleanMsgs(legacy), updated:Date.now() }];
+  }catch(e){}
+  return [];
+})();
+function saveThreads(){
+  threads.slice(0,50).forEach(function(th){ if(th.msgs.length>80) th.msgs.splice(0, th.msgs.length-80); });
+  store.set('chats',threads.map(function(th){ return { id:th.id, title:th.title, msgs:th.msgs, updated:th.updated }; }));
+}
+function ensureThread(){
+  if(!activeThread||!threads.some(function(th){ return th.id===activeThread.id; })){
+    activeThread={ id:'t'+Date.now(), title:'New chat', msgs:[], updated:Date.now() };
+    threads.unshift(activeThread);
+  }
+  settings.threadId=activeThread.id; store.set('settings',settings); saveThreads();
+  return activeThread;
+}
+let activeThread=(function(){
+  const id=settings.threadId||(threads[0]&&threads[0].id);
+  const th=threads.find(function(t){ return t.id===id; })||threads[0];
+  if(th){ settings.threadId=th.id; return th; }
+  return null;
+})();
+let chatMsgs=activeThread?activeThread.msgs:[];
 let busy=false;
 function tutorSystem(){
   const subj=SUBJ[state.subject], cls=state.cls;
@@ -291,26 +326,28 @@ function fmtAI(t){
 function tutorHTML(){
   const prov=settings.provider||'auto';
   return '<div class="fv-drawer-head">'+
-    '<div class="fv-drawer-title"><span class="ai-dot"></span>Vault AI <button class="fv-icon-btn" id="fvAISet" title="AI settings & API keys">⚙</button></div>'+
+    '<div class="fv-drawer-title"><span class="ai-dot"></span>Vault AI <button class="fv-txtbtn" id="fvAISet" title="AI settings & API keys">'+window.__I.settings+'Settings</button></div>'+
     '<div class="fv-drawer-actions">'+
       '<select class="fv-sel" id="fvProv"><option value="auto"'+(prov==='auto'?' selected':'')+'>Auto</option><option value="groq"'+(prov==='groq'?' selected':'')+'>Groq</option><option value="google"'+(prov==='google'?' selected':'')+'>Google</option><option value="openrouter"'+(prov==='openrouter'?' selected':'')+'>OpenRouter</option></select>'+
-      '<button class="fv-icon-btn" id="fvNewChat" title="Clear chat">🗑</button>'+
-      '<button class="fv-icon-btn" data-close title="Close">✕</button>'+
+      '<button class="fv-txtbtn" id="fvHistory" title="Review past conversations">'+window.__I.history+'History</button>'+
+      '<button class="fv-txtbtn" id="fvNewChat" title="Start a new conversation">'+window.__I.messagePlus+'New chat</button>'+
+      '<button class="fv-icon-btn" data-close title="Close">×</button>'+
     '</div></div>'+
-    '<div class="fv-chat" id="fvChat"></div>'+
+    '<div class="fv-drawer-body"><div class="fv-threads" id="fvThreads"></div>'+
+    '<div class="fv-drawer-main"><div class="fv-chat" id="fvChat"></div>'+
     '<div class="fv-suggest" id="fvSuggest"></div>'+
-    '<div class="fv-chat-input"><textarea id="fvChatText" rows="1" placeholder="Ask anything — any subject, any class…"></textarea><button class="fv-send" id="fvSend">➤</button></div>';
+    '<div class="fv-chat-input"><textarea id="fvChatText" rows="1" placeholder="Ask anything — any subject, any class…"></textarea><button class="fv-send" id="fvSend" title="Send">Send</button></div></div></div>';
 }
 function openAISettings(){
   const aiKeys=settings.aiKeys||{groq:'',google:'',openrouter:''};
   const w=openOverlay(
-    '<div class="fv-modal-head"><div><h3>⚙ Vault AI Settings</h3><span class="ctx-pill">Teaching tutor engine</span></div><button class="fv-icon-btn" data-close>✕</button></div>'+
+    '<div class="fv-modal-head"><div><h3>'+window.__I.settings+'Vault AI Settings</h3><span class="ctx-pill">Teaching tutor engine</span></div><button class="fv-icon-btn" data-close>×</button></div>'+
     '<div class="fv-modal-body">'+
       '<p class="fv-ai-note">'+(AI.serverMode()?'This deployed version uses the site\'s built-in API keys — the AI tutor already works, no setup needed. You may still add your own key below as a personal backup. ':'Vault AI is your tutor for any subject and any class. Paste one (or more) free API key below. ')+'Keys are saved <b>only on this device</b> and are never uploaded anywhere. Auto mode tries every provider that has a key.</p>'+
-      (!AI.serverMode()&&AI.configured().length===0 ? '<div class="fv-err" style="margin-bottom:12px">⚠ No provider is set up yet — add at least one key.</div>' : '')+
+      (!AI.serverMode()&&AI.configured().length===0 ? '<div class="fv-err" style="margin-bottom:12px">No provider is set up yet — add at least one key.</div>' : '')+
       ['groq','google','openrouter'].map(function(p){
         return '<div class="ai-key-row" data-p="'+p+'">'+
-          '<div class="ai-key-head"><b>'+AI.LABEL[p]+'</b><a href="'+AI.HELP[p]+'" target="_blank" rel="noopener">get a free key ↗</a><span class="ai-ok" id="aiChk'+p+'">'+(settings.aiKeys&&settings.aiKeys[p]?'✓ configured':'')+'</span></div>'+
+          '<div class="ai-key-head"><b>'+AI.LABEL[p]+'</b><a href="'+AI.HELP[p]+'" target="_blank" rel="noopener">get a free key ↗</a><span class="ai-ok" id="aiChk'+p+'">'+(settings.aiKeys&&settings.aiKeys[p]?'configured':'')+'</span></div>'+
           '<div class="ai-key-in"><input id="aiKey'+p+'" type="password" placeholder="'+escHtml(AI.keyTips[p])+'" value="'+escHtml(aiKeys[p]||'')+'" autocomplete="off" spellcheck="false">'+
             '<button class="fv-btn" id="aiTog'+p+'" type="button">Show</button>'+
             '<button class="fv-btn primary" id="aiTest'+p+'" type="button">Test</button></div>'+
@@ -334,8 +371,8 @@ function openAISettings(){
       settings.aiKeys=settings.aiKeys||{}; settings.aiKeys[p]=k; store.set('settings',settings);
       state.innerHTML='<span class="ai-wait">Testing connection…</span>';
       const btn=w.querySelector('#aiTest'+p); const prev=btn.textContent; btn.disabled=true; btn.textContent='…';
-      try{ await AI.testKey(p); state.innerHTML='<span class="ai-ok">✓ Key works! '+AI.LABEL[p]+' is ready to teach.</span>'; w.querySelector('#aiChk'+p).textContent='✓ working'; }
-      catch(e){ state.innerHTML='<span class="ai-err">⚠ '+escHtml(e.message||'failed')+'</span>'; }
+      try{ await AI.testKey(p); state.innerHTML='<span class="ai-ok">Key works! '+AI.LABEL[p]+' is ready to teach.</span>'; w.querySelector('#aiChk'+p).textContent='working'; }
+      catch(e){ state.innerHTML='<span class="ai-err">'+escHtml(e.message||'failed')+'</span>'; }
       btn.disabled=false; btn.textContent=prev;
     };
   });
@@ -350,8 +387,10 @@ function openAISettings(){
 }
 function openTutor(){
   loadMathJax();
+  ensureThread(); chatMsgs=activeThread.msgs;
   const w=openOverlay(tutorHTML(),'drawer');
   const chat=w.querySelector('#fvChat');
+  const thrEl=w.querySelector('#fvThreads');
   function scroll(){ chat.scrollTop=chat.scrollHeight; }
   function add(role,text){ const d=document.createElement('div'); d.className='msg '+role; d.innerHTML = role==='user'?escHtml(text):fmtAI(text); chat.appendChild(d); scroll(); return d; }
   function setStatus(el,s){ let st=el.querySelector('.fv-stream-status'); if(!st){ st=document.createElement('div'); st.className='fv-stream-status'; el.appendChild(st);} st.innerHTML='◌ '+escHtml(s); }
@@ -363,11 +402,58 @@ function openTutor(){
     box.innerHTML=sug.map(s=>'<button class="fv-sug">'+escHtml(s)+'</button>').join('');
     $$('.fv-sug',box).forEach(b=>b.onclick=()=>{ w.querySelector('#fvChatText').value=b.textContent; send(); });
   }
+  function touchThread(){ if(activeThread){ activeThread.updated=Date.now(); saveThreads(); if(thrEl&&!thrEl.hidden) renderThreads(); } }
+  function renderThreads(){
+    const list=threads.slice().sort(function(a,b){ return b.updated-a.updated; });
+    thrEl.innerHTML=
+      '<div class="fv-threads-head"><b>Conversations</b><button class="fv-txtbtn" id="fvNewInList">New chat</button></div>'+
+      (list.length ? list.map(function(th){
+        return '<div class="fv-thread'+(th.id===activeThread.id?' active':'')+'" data-tid="'+th.id+'">'+
+          '<div class="fv-thread-main"><b>'+escHtml(th.title||'Chat')+'</b><span>'+new Date(th.updated).toLocaleString(undefined,{month:'short',day:'numeric'})+' · '+th.msgs.length+' msg'+(th.msgs.length===1?'':'s')+'</span></div>'+
+          '<button class="fv-thread-x" data-tdel="'+th.id+'" title="Delete conversation">×</button></div>';
+      }).join('') : '<div class="fv-threads-empty">No conversations yet. Start one below.</div>');
+    $$('[data-tid]',thrEl).forEach(function(el){ el.onclick=function(){ switchThread(el.dataset.tid); }; });
+    $$('[data-tdel]',thrEl).forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); deleteThread(b.dataset.tdel); }; });
+    const nb=thrEl.querySelector('#fvNewInList'); if(nb){ nb.onclick=newThread; }
+  }
+  function deleteThread(id){
+    threads=threads.filter(function(th){ return th.id!==id; });
+    if(activeThread&&activeThread.id===id){
+      activeThread=threads[0]||null;
+      if(!activeThread){ ensureThread(); }
+      settings.threadId=activeThread.id; store.set('settings',settings);
+      chatMsgs=activeThread.msgs; renderChat();
+    }
+    saveThreads(); renderThreads();
+  }
+  function renderChat(){
+    chat.innerHTML='';
+    if(chatMsgs.length) chatMsgs.forEach(function(m){ add(m.role==='assistant'?'ai':'user', m.content); });
+    else if(AI.serverMode()||AI.configured().length)
+      add('ai', "Hey! I'm Vault AI — your tutor for any subject, any class, any level. Explain formulas, work through problems, quiz you, or plan revision — for physics, chemistry, math, coding or anything you're stuck on. What's confusing you today?");
+    else add('ai', "Welcome! I'm Vault AI. To let me teach you, add a free API key (Groq, Google or OpenRouter) in Settings. Tap Settings above and paste any key, then hit Save.");
+  }
+  function newThread(){
+    activeThread={ id:'t'+Date.now(), title:'New chat', msgs:[], updated:Date.now() };
+    threads.unshift(activeThread); settings.threadId=activeThread.id; store.set('settings',settings); saveThreads();
+    chatMsgs=activeThread.msgs;
+    chat.innerHTML=''; renderChat(); renderSug(); w.classList.remove('threads-open');
+  }
+  function switchThread(id){
+    const th=threads.find(function(t){ return t.id===id; });
+    if(th&&th!==activeThread){
+      activeThread=th; settings.threadId=th.id; store.set('settings',settings); chatMsgs=activeThread.msgs;
+      renderChat(); renderSug();
+    }
+    w.classList.remove('threads-open');
+  }
   async function send(){
     if(busy) return;
     const ta=w.querySelector('#fvChatText'); const q=ta.value.trim(); if(!q) return;
     ta.value=''; ta.style.height='auto';
     add('user',q); chatMsgs.push({role:'user',content:q});
+    if(!activeThread.title||activeThread.title==='New chat') activeThread.title=threadTitleFrom(q);
+    touchThread();
     busy=true; w.querySelector('#fvSend').disabled=true;
     const el=add('ai',''); el.innerHTML='<div class="fv-typing"><i></i><i></i><i></i></div>';
     let acc=''; const ctl=new AbortController();
@@ -378,9 +464,9 @@ function openTutor(){
         onDelta:d=>{ acc+=d; el.innerHTML=fmtAI(acc)+'<span class="caret"></span>'; scroll(); }
       });
       el.innerHTML=fmtAI(acc); typeset(el);
-      chatMsgs.push({role:'assistant',content:acc}); store.set('chat',chatMsgs.slice(-40));
+      chatMsgs.push({role:'assistant',content:acc}); touchThread();
     }catch(e){
-      if(e&&e.name==='AbortError'){ el.innerHTML=fmtAI(acc)+' <span class="stoptag">stopped</span>'; if(acc){ chatMsgs.push({role:'assistant',content:acc}); store.set('chat',chatMsgs); } }
+      if(e&&e.name==='AbortError'){ el.innerHTML=fmtAI(acc)+' <span class="stoptag">stopped</span>'; if(acc){ chatMsgs.push({role:'assistant',content:acc}); touchThread(); } }
       else {
         el.innerHTML=fmtAI(acc)+aiKeyErrHTML(e.message||'AI failed');
         wireGoKeys(w);
@@ -394,12 +480,10 @@ function openTutor(){
   ta.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
   ta.addEventListener('input',()=>{ ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px'; });
   w.querySelector('#fvProv').onchange=e=>{ settings.provider=e.target.value; store.set('settings',settings); toast('AI provider: '+e.target.value); };
-  w.querySelector('#fvNewChat').onclick=()=>{ chatMsgs=[]; store.set('chat',[]); chat.innerHTML=''; add('ai','Fresh start! ✦ What shall we learn today?'); renderSug(); };
-  if(chatMsgs.length) chatMsgs.forEach(m=>add(m.role==='assistant'?'ai':'user', m.content));
-  else if(AI.serverMode()||AI.configured().length)
-    add('ai', "Hey! I'm Vault AI ✦ — your tutor for any subject, any class, any level. Explain formulas, work through problems, quiz you, or plan revision — physics, chemistry, math, coding, whatever you're stuck on. What's confusing you today?");
-  else add('ai', 'Welcome! I\'m Vault AI ✦. To let me teach you, add a free API key (Groq, Google or OpenRouter) in ⚙ AI Settings. Tap ⚙ above and paste any key, then hit Save.');
-  renderSug();
+  w.querySelector('#fvHistory').onclick=function(){ if(w.classList.toggle('threads-open')) renderThreads(); };
+  w.querySelector('#fvNewChat').onclick=newThread;
+  chat.addEventListener('click',function(){ w.classList.remove('threads-open'); });
+  renderChat(); renderSug();
   setTimeout(()=>ta.focus(),150);
 }
 function askTutor(text){ openTutor(); setTimeout(()=>{ const ta=$('#fvChatText'); if(ta){ ta.value=text; const btn=$('#fvSend'); if(btn) btn.click(); } },400); }
@@ -407,7 +491,7 @@ function askTutor(text){ openTutor(); setTimeout(()=>{ const ta=$('#fvChatText')
 /* ============ Explain with AI (modal) ============ */
 function openExplain(c){
   loadMathJax();
-  const w=openOverlay('<div class="fv-modal-head"><div><h3>✦ AI Explanation</h3><span class="ctx-pill">'+SUBJ[c.subject]+' · '+escHtml(c.chapter)+'</span></div><button class="fv-icon-btn" data-close>✕</button></div>'+
+  const w=openOverlay('<div class="fv-modal-head"><div><h3>'+window.__I.sparkles+'AI Explanation</h3><span class="ctx-pill">'+SUBJ[c.subject]+' · '+escHtml(c.chapter)+'</span></div><button class="fv-icon-btn" data-close>×</button></div>'+
     '<div class="fv-modal-body"><div class="qq" style="margin:0 0 10px">'+escHtml(c.t)+'</div><div class="calc-out" style="margin-bottom:12px">'+c.eq+'</div><div id="fvExOut"><div class="fv-typing"><i></i><i></i><i></i></div></div></div>'+
     '<div class="fv-modal-foot"><button class="fv-btn" data-close>Close</button><button class="fv-btn primary" id="fvExMore">Go deeper in Tutor →</button></div>','modal');
   const out=w.querySelector('#fvExOut');
@@ -427,12 +511,12 @@ function openExplain(c){
   function openSheet(){
     const sel={};
     DATA.forEach(function(d){ sel[d.cls+'|'+d.subject+'|'+d.chapter]=false; });
-    const w=openOverlay('<div class="fv-modal-head"><div><h3>📄 Revision Sheet</h3><span class="ctx-pill" id="shCount"></span></div><button class="fv-icon-btn" data-close>✕</button></div>'+
+    const w=openOverlay('<div class="fv-modal-head"><div><h3>'+window.__I.fileText+'Revision Sheet</h3><span class="ctx-pill" id="shCount"></span></div><button class="fv-icon-btn" data-close>×</button></div>'+
       '<div class="fv-modal-body"><div class="sh-groups">'+ DATA.map(function(d){
         return '<div class="sh-chip" data-k="'+d.cls+'|'+d.subject+'|'+d.chapter+'"><span>'+escHtml(d.chapter)+'</span><i>Class '+d.cls+' · '+SUBJ[d.subject].slice(0,4)+' · '+d.formulas.length+' formulas</i></div>';
       }).join('')+'</div>'+
       '<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center">'+
-        '<button class="fv-btn" id="shFavs">★ Use my bookmarks</button>'+
+        '<button class="fv-btn" id="shFavs">'+window.__I.bookmark+'Use my bookmarks</button>'+
         '<button class="fv-btn" id="shAll">Toggle all</button>'+
         '<button class="fv-btn primary" id="shGo" style="margin-left:auto">Preview sheet →</button>'+
       '</div></div>','modal sheet-modal');
@@ -462,7 +546,7 @@ function openExplain(c){
     });
     if(!items.length){ toast('Select at least one chapter'); return; }
     const body=w.querySelector('.fv-modal-body');
-    body.innerHTML='<div class="sh-toolbar"><button class="fv-btn" id="shBack">← Chapters</button><button class="fv-btn" id="shAi">✦ AI top-pick 25</button><button class="fv-btn primary" id="shPrint">🖨 Print / Save PDF</button></div>'+
+    body.innerHTML='<div class="sh-toolbar"><button class="fv-btn" id="shBack">← Chapters</button><button class="fv-btn" id="shAi">'+window.__I.sparkles+'AI top-pick 25</button><button class="fv-btn primary" id="shPrint">'+window.__I.printer+'Print / Save PDF</button></div>'+
       '<div class="sh-scroll"><div class="sheet" id="sheetGrid">'+
         '<div class="sheet-head"><h1>Formula Vault — Revision Sheet</h1><p>'+new Date().toLocaleDateString()+' · '+items.length+' formulas</p></div>'+
         items.map(function(it){
@@ -472,7 +556,7 @@ function openExplain(c){
             '<div class="si-eq">'+c.eq+'</div>'+
             (c.sym&&c.sym.length?'<div class="si-sym">'+c.sym.slice(0,4).map(s=>'<span><b>'+escHtml(s[0])+'</b> '+escHtml(s[1])+'</span>').join('')+'</div>':'')+
             (c.tip?'<div class="si-tip">'+escHtml(c.tip)+'</div>':'')+
-            '<button class="si-x" title="Remove from sheet">✕</button></div>';
+            '<button class="si-x" title="Remove from sheet">×</button></div>';
         }).join('')+
       '</div></div>';
     w.querySelector('#shBack').onclick=function(){ closeOverlay(w); openSheet(); };
@@ -482,7 +566,7 @@ function openExplain(c){
   }
   function aiTopPicks(w, items){
     const btn=w.querySelector('#shAi');
-    if(btn){ btn.disabled=true; btn.textContent='✦ Picking…'; }
+    if(btn){ btn.disabled=true; btn.textContent='Picking…'; }
     const list=items.map(function(it,i){ return (i+1)+'. ['+it.chapter+'] '+it.f.t+' — '+FV.strip(it.f.eq); }).join('\n');
     let acc='';
     AI.chat([
@@ -495,21 +579,21 @@ function openExplain(c){
       if(!idxs.length) throw new Error('empty');
       const grid=w.querySelector('#sheetGrid'); if(!grid) return;
       const picks=idxs.map(i=>items[i-1]);
-      grid.innerHTML='<div class="sheet-head"><h1>AI Top Picks ✦</h1><p>'+picks.length+' highest-yield formulas chosen by AI · '+new Date().toLocaleDateString()+'</p></div>'+
+      grid.innerHTML='<div class="sheet-head"><h1>AI Top Picks</h1><p>'+picks.length+' highest-yield formulas chosen by AI · '+new Date().toLocaleDateString()+'</p></div>'+
         picks.map(function(it){
           const c=it.f;
           return '<div class="sheet-item"><div class="si-ch">'+escHtml(it.chapter)+'</div>'+
             '<div class="si-t">'+escHtml(c.t)+'</div>'+
             '<div class="si-eq">'+c.eq+'</div>'+
             (c.sym&&c.sym.length?'<div class="si-sym">'+c.sym.slice(0,4).map(s=>'<span><b>'+escHtml(s[0])+'</b> '+escHtml(s[1])+'</span>').join('')+'</div>':'')+
-            '<button class="si-x" title="Remove from sheet">✕</button></div>';
+            '<button class="si-x" title="Remove from sheet">×</button></div>';
         }).join('');
       $$('.si-x',w).forEach(function(x){ x.onclick=function(){ x.closest('.sheet-item').remove(); }; });
-      toast('✦ AI picked '+picks.length+' formulas');
+      toast('AI picked '+picks.length+' formulas');
     })
     .catch(function(e){
-      toast((e&&e.code==='AI_NO_KEY') ? '⚠ Add an API key in ⚙ AI Settings to use AI top picks' : ('⚠ AI pick failed — '+(e.message||'try again')));
-      if(btn){ btn.disabled=false; btn.textContent='✦ AI top-pick 25'; }
+      toast((e&&e.code==='AI_NO_KEY') ? 'Add an API key in AI Settings to use AI top picks' : ('AI pick failed — '+(e.message||'try again')));
+      if(btn){ btn.disabled=false; btn.innerHTML=window.__I.sparkles+'AI top-pick 25'; }
     });
   }
 
@@ -521,9 +605,9 @@ function openExplain(c){
   else{ queue=CARDS.filter(c=>c.subject===state.subject&&(state.chapter==='all'||c.chapter===state.chapter)); if(queue.length<5) queue=CARDS.slice(); queue=shuffle(queue.slice()); }
   queue=queue.slice(0,15);
   const ST={q:queue,i:0,got:0,again:0,handler:null};
-  const w=openOverlay('<div class="study-top"><button class="fv-icon-btn" id="stEnd" title="End session">✕</button><div class="study-progress"><i id="stProg" style="width:0%"></i></div><span class="ctx-pill" id="stCnt"></span></div>'+
+  const w=openOverlay('<div class="study-top"><button class="fv-icon-btn" id="stEnd" title="End session">×</button><div class="study-progress"><i id="stProg" style="width:0%"></i></div><span class="ctx-pill" id="stCnt"></span></div>'+
     '<div class="study-card" id="stCard"><div class="study-inner" id="stInner"></div></div>'+
-    '<div class="study-btns"><button class="fv-btn again" id="stAgain">✕ Again<span class="k">1</span></button><button class="fv-btn got" id="stGot">✓ Got it<span class="k">2</span></button></div>'+
+    '<div class="study-btns"><button class="fv-btn again" id="stAgain">Again<span class="k">1</span></button><button class="fv-btn got" id="stGot">Got it<span class="k">2</span></button></div>'+
     '<div class="study-hintkeys">Click card or press Space to flip · 1 = again · 2 = got it</div>','study');
   function show(){
     const c=ST.q[ST.i];
@@ -549,7 +633,7 @@ function openExplain(c){
   function summary(){
     const total=ST.got+ST.again; if(!total) return;
     const pct=Math.round(100*ST.got/total);
-    toast('🃏 Session: '+ST.got+'✓ / '+ST.again+'✗ ('+pct+'%)');
+    toast('Session: '+ST.got+' correct, '+ST.again+' again ('+pct+'%)');
     if(pct>=80) confetti(80);
   }
   w.querySelector('#stCard').onclick=flip;
@@ -568,19 +652,19 @@ function openExplain(c){
 
 /* ============ Smart calculators ============ */
 const CALCS={
-  proj:{name:'🚀 Projectile',fields:[['u','Initial speed u (m/s)'],['th','Angle θ (°)']],compute:function(v){ const u=+v.u, thd=+v.th; if(!(u>0)||isNaN(thd)) return 'Enter u and θ.'; const th=thd*Math.PI/180, g=9.8; const T=2*u*Math.sin(th)/g, H=u*u*Math.pow(Math.sin(th),2)/(2*g), R=u*u*Math.sin(2*th)/g; return '<b>T = '+T.toFixed(2)+' s</b><br><b>H = '+H.toFixed(2)+' m</b><br><b>R = '+R.toFixed(2)+' m</b>'; }},
-  kin:{name:'🏃 Kinematics',fields:[['u','u (m/s)'],['a','a (m/s²)'],['t','t (s)']],compute:function(v){ const u=+v.u,a=+v.a,t=+v.t; if(isNaN(u)||isNaN(a)||isNaN(t)) return 'Fill u, a and t.'; return '<b>v = '+(u+a*t).toFixed(2)+' m/s</b><br><b>s = '+(u*t+0.5*a*t*t).toFixed(2)+' m</b>'; }},
-  ohm:{name:'⚡ Ohm & Power',fields:[['V','Voltage V (V) — leave one blank'],['I','Current I (A)'],['R','Resistance R (Ω)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); let V=v.V,I=v.I,R=v.R; if(f(V)&&f(I)&&!f(R)) R=+V/+I; else if(f(V)&&f(R)&&!f(I)) I=+V/+R; else if(f(I)&&f(R)&&!f(V)) V=+I*+R; else return 'Fill exactly two fields.'; return '<b>V = '+V.toFixed(2)+' V</b><br><b>I = '+I.toFixed(2)+' A</b><br><b>R = '+R.toFixed(2)+' Ω</b><br><b>P = '+(V*I).toFixed(2)+' W</b>'; }},
-  gas:{name:'🎈 Ideal gas',fields:[['P','Pressure P (Pa)'],['V','Volume V (m³)'],['n','Moles n (mol)'],['T','Temperature T (K)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); const R=8.314; if(['P','V','n','T'].filter(k=>f(v[k])).length!==3) return 'Fill exactly three of P, V, n, T.'; let P=f(v.P)?+v.P:null,V=f(v.V)?+v.V:null,n=f(v.n)?+v.n:null,T=f(v.T)?+v.T:null; if(P===null)P=n*R*T/V; if(V===null)V=n*R*T/P; if(n===null)n=P*V/(R*T); if(T===null)T=P*V/(n*R); return '<b>P = '+P.toFixed(2)+' Pa</b><br><b>V = '+V.toFixed(4)+' m³</b><br><b>n = '+n.toFixed(4)+' mol</b><br><b>T = '+T.toFixed(2)+' K</b>'; }},
-  acid:{name:'🧪 pH & [H⁺]',fields:[['h','[H⁺] concentration (M)']],compute:function(v){ const h=+v.h; if(!(h>0)) return 'Enter a positive concentration.'; const pH=-Math.log10(h), pOH=14-pH; return '<b>pH = '+pH.toFixed(2)+'</b><br><b>pOH = '+pOH.toFixed(2)+'</b><br><b>[OH⁻] = '+Math.pow(10,-pOH).toExponential(2)+' M</b>'; }},
-  quad:{name:'📐 Quadratic',fields:[['a','a'],['b','b'],['c','c']],compute:function(v){ const a=+v.a,b=+v.b,c=+v.c; if(isNaN(a)||isNaN(b)||isNaN(c)) return 'Enter a, b, c.'; if(a===0) return b===0?'Not an equation.':'Linear: x = '+(-c/b); const D=b*b-4*a*c; let roots; if(D>0) roots='x₁ = '+((-b+Math.sqrt(D))/(2*a)).toFixed(4)+', x₂ = '+((-b-Math.sqrt(D))/(2*a)).toFixed(4); else if(D===0) roots='x = '+(-b/(2*a)); else roots='x = '+(-b/(2*a)).toFixed(4)+' ± '+(Math.sqrt(-D)/(2*a)).toFixed(4)+'i'; return '<b>D = '+D+'</b> ('+(D>0?'two real roots':D===0?'equal real roots':'complex roots')+')<br><b>'+roots+'</b>'; }},
-  mol:{name:'💧 Molarity',fields:[['n','Moles of solute (mol)'],['V','Solution volume (L)']],compute:function(v){ const n=+v.n,V=+v.V; if(!(n>0)||!(V>0)) return 'Enter moles and volume.'; return '<b>M = '+(n/V).toFixed(4)+' mol/L</b>'; }},
-  err:{name:'🎯 % Error',fields:[['tv','True value'],['mv','Measured value']],compute:function(v){ const t=+v.tv,m=+v.mv; if(isNaN(t)||isNaN(m)||t===0) return 'Enter both values (true ≠ 0).'; const ae=Math.abs(t-m); return '<b>Absolute error = '+ae.toFixed(4)+'</b><br><b>% error = '+(ae/Math.abs(t)*100).toFixed(2)+'%</b>'; }}
+  proj:{ic:'rocket',name:'Projectile',fields:[['u','Initial speed u (m/s)'],['th','Angle θ (°)']],compute:function(v){ const u=+v.u, thd=+v.th; if(!(u>0)||isNaN(thd)) return 'Enter u and θ.'; const th=thd*Math.PI/180, g=9.8; const T=2*u*Math.sin(th)/g, H=u*u*Math.pow(Math.sin(th),2)/(2*g), R=u*u*Math.sin(2*th)/g; return '<b>T = '+T.toFixed(2)+' s</b><br><b>H = '+H.toFixed(2)+' m</b><br><b>R = '+R.toFixed(2)+' m</b>'; }},
+  kin:{ic:'gauge',name:'Kinematics',fields:[['u','u (m/s)'],['a','a (m/s²)'],['t','t (s)']],compute:function(v){ const u=+v.u,a=+v.a,t=+v.t; if(isNaN(u)||isNaN(a)||isNaN(t)) return 'Fill u, a and t.'; return '<b>v = '+(u+a*t).toFixed(2)+' m/s</b><br><b>s = '+(u*t+0.5*a*t*t).toFixed(2)+' m</b>'; }},
+  ohm:{ic:'zap',name:'Ohm & Power',fields:[['V','Voltage V (V) — leave one blank'],['I','Current I (A)'],['R','Resistance R (Ω)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); let V=v.V,I=v.I,R=v.R; if(f(V)&&f(I)&&!f(R)) R=+V/+I; else if(f(V)&&f(R)&&!f(I)) I=+V/+R; else if(f(I)&&f(R)&&!f(V)) V=+I*+R; else return 'Fill exactly two fields.'; return '<b>V = '+V.toFixed(2)+' V</b><br><b>I = '+I.toFixed(2)+' A</b><br><b>R = '+R.toFixed(2)+' Ω</b><br><b>P = '+(V*I).toFixed(2)+' W</b>'; }},
+  gas:{ic:'wind',name:'Ideal gas',fields:[['P','Pressure P (Pa)'],['V','Volume V (m³)'],['n','Moles n (mol)'],['T','Temperature T (K)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); const R=8.314; if(['P','V','n','T'].filter(k=>f(v[k])).length!==3) return 'Fill exactly three of P, V, n, T.'; let P=f(v.P)?+v.P:null,V=f(v.V)?+v.V:null,n=f(v.n)?+v.n:null,T=f(v.T)?+v.T:null; if(P===null)P=n*R*T/V; if(V===null)V=n*R*T/P; if(n===null)n=P*V/(R*T); if(T===null)T=P*V/(n*R); return '<b>P = '+P.toFixed(2)+' Pa</b><br><b>V = '+V.toFixed(4)+' m³</b><br><b>n = '+n.toFixed(4)+' mol</b><br><b>T = '+T.toFixed(2)+' K</b>'; }},
+  acid:{ic:'flask',name:'pH & [H⁺]',fields:[['h','[H⁺] concentration (M)']],compute:function(v){ const h=+v.h; if(!(h>0)) return 'Enter a positive concentration.'; const pH=-Math.log10(h), pOH=14-pH; return '<b>pH = '+pH.toFixed(2)+'</b><br><b>pOH = '+pOH.toFixed(2)+'</b><br><b>[OH⁻] = '+Math.pow(10,-pOH).toExponential(2)+' M</b>'; }},
+  quad:{ic:'fn',name:'Quadratic',fields:[['a','a'],['b','b'],['c','c']],compute:function(v){ const a=+v.a,b=+v.b,c=+v.c; if(isNaN(a)||isNaN(b)||isNaN(c)) return 'Enter a, b, c.'; if(a===0) return b===0?'Not an equation.':'Linear: x = '+(-c/b); const D=b*b-4*a*c; let roots; if(D>0) roots='x₁ = '+((-b+Math.sqrt(D))/(2*a)).toFixed(4)+', x₂ = '+((-b-Math.sqrt(D))/(2*a)).toFixed(4); else if(D===0) roots='x = '+(-b/(2*a)); else roots='x = '+(-b/(2*a)).toFixed(4)+' ± '+(Math.sqrt(-D)/(2*a)).toFixed(4)+'i'; return '<b>D = '+D+'</b> ('+(D>0?'two real roots':D===0?'equal real roots':'complex roots')+')<br><b>'+roots+'</b>'; }},
+  mol:{ic:'droplet',name:'Molarity',fields:[['n','Moles of solute (mol)'],['V','Solution volume (L)']],compute:function(v){ const n=+v.n,V=+v.V; if(!(n>0)||!(V>0)) return 'Enter moles and volume.'; return '<b>M = '+(n/V).toFixed(4)+' mol/L</b>'; }},
+  err:{ic:'target',name:'% Error',fields:[['tv','True value'],['mv','Measured value']],compute:function(v){ const t=+v.tv,m=+v.mv; if(isNaN(t)||isNaN(m)||t===0) return 'Enter both values (true ≠ 0).'; const ae=Math.abs(t-m); return '<b>Absolute error = '+ae.toFixed(4)+'</b><br><b>% error = '+(ae/Math.abs(t)*100).toFixed(2)+'%</b>'; }}
 };
 function openCalc(){
   const keys=Object.keys(CALCS);
-  const w=openOverlay('<div class="fv-modal-head"><h3>🧮 Smart Calculators</h3><button class="fv-icon-btn" data-close>✕</button></div>'+
-    '<div class="calc-tabs">'+keys.map((k,i)=>'<button class="calc-tab'+(i===0?' active':'')+'" data-k="'+k+'">'+CALCS[k].name+'</button>').join('')+'</div>'+
+  const w=openOverlay('<div class="fv-modal-head"><h3>'+window.__I.calculator+'Smart Calculators</h3><button class="fv-icon-btn" data-close>×</button></div>'+
+    '<div class="calc-tabs">'+keys.map((k,i)=>'<button class="calc-tab'+(i===0?' active':'')+'" data-k="'+k+'">'+window.__I[CALCS[k].ic]+CALCS[k].name+'</button>').join('')+'</div>'+
     '<div class="fv-modal-body"><div class="calc-grid" id="calcGrid"></div></div>','modal');
   let cur=keys[0];
   function render(){
@@ -592,40 +676,15 @@ function openCalc(){
   render();
 }
 
-/* ============ Stats dashboard ============ */
-function openStats(){
-  let totalSeen=0,totalKnown=0; Object.keys(study).forEach(k=>{ totalSeen+=study[k].seen||0; totalKnown+=study[k].known||0; });
-  const mastery=totalSeen?Math.round(100*totalKnown/totalSeen):0;
-  const sheetsMade=sheets;
-  const days=[]; for(let i=20;i>=0;i--){ days.push(streak.days.indexOf(new Date(Date.now()-i*864e5).toDateString())!==-1); }
-  const RGB={physics:'29,100,216',chemistry:'14,147,174',math:'84,87,217'};
-  const w=openOverlay('<div class="fv-modal-head"><h3>📊 Your Progress</h3><button class="fv-icon-btn" data-close>✕</button></div><div class="fv-modal-body">'+
-    '<div class="stat-tiles">'+
-      '<div class="stile"><b>'+CARDS.length+'</b><span>Formulas</span></div>'+
-      '<div class="stile"><b>'+DCARDS.length+'</b><span>Derivations</span></div>'+
-      '<div class="stile"><b>'+LCARDS.length+'</b><span>Laws</span></div>'+
-      '<div class="stile"><b>'+favs.length+'</b><span>Bookmarks</span></div>'+
-      '<div class="stile"><b>'+streak.count+'🔥</b><span>Day streak</span></div>'+
-      '<div class="stile"><b>'+aiCalls+'</b><span>AI calls</span></div>'+
-    '</div>'+ 
-    '<div class="law-section-label" style="color:var(--acc);margin:16px 0 8px">Revision sheets generated</div><div class="sbrow"><span class="nm">Sheets</span><div class="bar"><i style="width:'+Math.min(100,sheetsMade*12)+'%"></i></div><span>'+sheetsMade+'</span></div>'+ 
-    '<div class="law-section-label" style="color:var(--acc);margin:16px 0 8px">Flashcard mastery — '+mastery+'%</div><div class="sbrow"><span class="nm">Study</span><div class="bar"><i style="width:'+mastery+'%"></i></div><span>'+totalSeen+' reviews</span></div>'+ 
-    '<div class="law-section-label" style="color:var(--acc);margin:16px 0 8px">Last 21 days</div><div class="heat">'+days.map(on=>'<i class="'+(on?'on':'')+'"></i>').join('')+'</div>'+ 
-    '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button class="fv-btn" id="stExport">⬇ Export</button><button class="fv-btn" id="stImport">⬆ Import</button><button class="fv-btn danger" id="stReset">Reset progress</button></div>'+ 
-  '</div>','modal');
-  w.querySelector('#stExport').onclick=exportData;
-  w.querySelector('#stImport').onclick=importData;
-  w.querySelector('#stReset').onclick=()=>{ resetAll(); closeOverlay(w); };
-}
 function exportData(){
   const blob=new Blob([JSON.stringify({favs:favs,sheets:sheets,study:study,streak:streak,settings:settings,v:2},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='formula-vault-data.json'; a.click();
-  toast('Data exported ⬇');
+  toast('Data exported');
 }
 function importData(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
   inp.onchange=function(){ const f=inp.files[0]; if(!f) return; const r=new FileReader();
-    r.onload=function(){ try{ const d=JSON.parse(r.result); if(d.favs)favs=d.favs; if(d.sheets)sheets=d.sheets; if(d.study)study=d.study; if(d.streak)streak=d.streak; if(d.settings)settings=Object.assign({},settings,d.settings); saveAll(); updateFavBadge(); FV.renderAll(); toast('Data imported ✓'); }catch(e){ toast('⚠ Invalid file'); } };
+    r.onload=function(){ try{ const d=JSON.parse(r.result); if(d.favs)favs=d.favs; if(d.sheets)sheets=d.sheets; if(d.study)study=d.study; if(d.streak)streak=d.streak; if(d.settings)settings=Object.assign({},settings,d.settings); saveAll(); updateFavBadge(); FV.renderAll(); toast('Data imported'); }catch(e){ toast('Invalid file'); } };
     r.readAsText(f); };
   inp.click();
 }
@@ -639,8 +698,8 @@ function resetAll(){
 /* ============ Bookmarks ============ */
 function openFavs(){
   const cards=favs.map(k=>CARDS.find(c=>key(c)===k)).filter(Boolean);
-  const w=openOverlay('<div class="fv-modal-head"><h3>★ Bookmarks</h3><button class="fv-icon-btn" data-close>✕</button></div><div class="fv-modal-body">'+
-    (cards.length?cards.map(function(c){ return '<div class="fav-row"><span class="fav-dot" style="background:'+ACCENT[c.subject]+'"></span><div class="fav-main" data-jump="'+escHtml(key(c))+'"><b>'+escHtml(c.t)+'</b><span>Class '+c.cls+' · '+SUBJ[c.subject]+' · '+escHtml(c.chapter)+'</span></div><button class="fav-x" data-x="'+escHtml(key(c))+'" title="Remove">✕</button></div>'; }).join(''):'<div style="text-align:center;padding:30px 10px;color:var(--text-low)">No bookmarks yet.<br>Tap the ☆ on any formula card to pin it here.</div>')+
+  const w=openOverlay('<div class="fv-modal-head"><h3>'+window.__I.star+'Bookmarks</h3><button class="fv-icon-btn" data-close>×</button></div><div class="fv-modal-body">'+
+    (cards.length?cards.map(function(c){ return '<div class="fav-row"><span class="fav-dot" style="background:'+ACCENT[c.subject]+'"></span><div class="fav-main" data-jump="'+escHtml(key(c))+'"><b>'+escHtml(c.t)+'</b><span>Class '+c.cls+' · '+SUBJ[c.subject]+' · '+escHtml(c.chapter)+'</span></div><button class="fav-x" data-x="'+escHtml(key(c))+'" title="Remove">×</button></div>'; }).join(''):'<div style="text-align:center;padding:30px 10px;color:var(--text-low)">No bookmarks yet.<br>Tap the star on any formula card to pin it here.</div>')+
   '</div>','modal');
   $$('[data-jump]',w).forEach(el=>el.onclick=()=>{ const c=CARDS.find(x=>key(x)===el.dataset.jump); if(c) jumpToCard(c); });
   $$('[data-x]',w).forEach(el=>el.onclick=()=>{ favs=favs.filter(k=>k!==el.dataset.x); store.set('favs',favs); updateFavBadge(); el.closest('.fav-row').remove(); FV.renderAll(); toast('Removed from bookmarks'); });
@@ -668,7 +727,7 @@ function jumpTo(cls,subject,chapter,mode){
 }
   function updateFavBadge(){ const b=document.getElementById('fvFavCount'); if(b) b.textContent=favs.length||''; }
 function heroCounters(){
-  [['hTotal',CARDS.length],['hDeriv',DCARDS.length],['hLaws',LCARDS.length],['hStreak',streak.count]].forEach(function(pair){
+  [['hTotal',CARDS.length],['hDeriv',DCARDS.length],['hLaws',LCARDS.length]].forEach(function(pair){
     const el=document.getElementById(pair[0]); if(!el) return; let cur=0;
     const step=Math.max(1,Math.round(pair[1]/28));
     const iv=setInterval(function(){ cur+=step; if(cur>=pair[1]){ cur=pair[1]; clearInterval(iv); } el.textContent=cur; },28);
@@ -677,14 +736,13 @@ function heroCounters(){
 document.getElementById('grid').addEventListener('click', function(e){
   const fav=e.target.closest('.fv-fav');
   if(fav){ const c=CARDS[+fav.dataset.fav]; if(!c) return; const k=key(c);
-    if(favs.indexOf(k)!==-1){ favs=favs.filter(x=>x!==k); fav.classList.remove('active'); fav.textContent='☆'; }
-    else{ favs.push(k); fav.classList.add('active'); fav.textContent='★'; toast('★ Bookmarked — '+c.t.slice(0,42)); }
+    if(favs.indexOf(k)!==-1){ favs=favs.filter(x=>x!==k); fav.classList.remove('active'); fav.innerHTML=window.__I.star; }
+    else{ favs.push(k); fav.classList.add('active'); fav.innerHTML=window.__I.starFilled; toast('Bookmarked — '+c.t.slice(0,42)); }
     store.set('favs',favs); updateFavBadge(); return; }
   const ex=e.target.closest('.fv-explain');
   if(ex){ const c=CARDS[+ex.dataset.explain]; if(c) openExplain(c); }
 });
 document.getElementById('fvBtnTutor').onclick=openTutor;
-document.getElementById('fvBtnStats').onclick=openStats;
 document.getElementById('fvBtnFavs').onclick=openFavs;
 $$('[data-open]').forEach(function(b){ b.addEventListener('click',function(){ const fn={tutor:openTutor,sheet:openSheet,study:openStudy,calc:openCalc}[b.dataset.open]; if(fn) fn(); }); });
 /* comment: application keyboard shortcuts removed with the command palette */
