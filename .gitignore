@@ -16,3 +16,8 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 node_modules/
+
+# Vercel local project state
+.vercel/
+.vercel
+.env*

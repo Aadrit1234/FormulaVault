@@ -165,8 +165,43 @@ const AI = (function(){
     return true;
   }
 
+  function serverMode(){ return typeof location!=='undefined' && /^https?:$/.test(location.protocol||''); }
+  async function serverChat(messages, o){
+    const res=await fetch('/api/ai', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: messages, provider: settings.provider||'auto', maxTokens: o.maxTokens||1800 }),
+      signal: o.signal });
+    if(!res.ok){
+      let j=null; try{ j=await res.json(); }catch(e){}
+      const msg = j&&j.error ? (j.error.message||'AI server error') : ('AI server unavailable ('+res.status+')');
+      const err = new Error(msg);
+      if(j&&j.error&&j.error.code){ err.code=j.error.code; err.provider=j.error.provider; }
+      throw err;
+    }
+    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='', acc='', got=false;
+    while(true){
+      const r=await reader.read(); if(r.done) break;
+      buf+=dec.decode(r.value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n'))>=0){
+        const line=buf.slice(0,idx).trim(); buf=buf.slice(idx+1);
+        if(!line) continue;
+        let j; try{ j=JSON.parse(line); }catch(e){ continue; }
+        if(j.error){ const err=new Error(j.error.message||'AI server error'); if(j.error.code) err.code=j.error.code; err.provider=j.error.provider; throw err; }
+        if(j.delta!=null){ got=true; acc+=j.delta; if(o.onDelta) o.onDelta(j.delta); }
+      }
+    }
+    if(!got&&!acc){ const e=new Error('AI server returned no response'); e.code='AI_EMPTY'; throw e; }
+    return { provider:'server', model:'server' };
+  }
+
   async function chat(messages, o){
     o=o||{}; aiCalls++; store.set('aiCalls',aiCalls);
+    if(serverMode()&&!o.noServer){
+      try{ return await serverChat(messages.slice(-14), o); }
+      catch(e){
+        if(e&&e.name==='AbortError') throw e;
+      }
+    }
     let order = settings.provider==='auto' ? configured() : (hasKey(settings.provider)?[settings.provider]:[]);
     if(!order.length){ const e=new Error('No AI provider configured yet. Open ⚙ AI Settings and paste a free API key for Groq, Google or OpenRouter — it stays on your device.'); e.code='AI_NO_KEY'; throw e; }
     let streamed=false; let lastErr=null;
@@ -196,7 +231,7 @@ const AI = (function(){
     return true;
   }
 
-  return { chat:chat, testKey:testKey, LABEL:LABEL, HELP:HELP, keyTips:keyTips, hasKey:hasKey, configured:configured };
+  return { chat:chat, testKey:testKey, LABEL:LABEL, HELP:HELP, keyTips:keyTips, hasKey:hasKey, configured:configured, serverMode:serverMode };
 })();
 
 function aiKeyErrHTML(msg){
@@ -267,8 +302,8 @@ function openAISettings(){
   const w=openOverlay(
     '<div class="fv-modal-head"><div><h3>⚙ Vault AI Settings</h3><span class="ctx-pill">Teaching tutor engine</span></div><button class="fv-icon-btn" data-close>✕</button></div>'+
     '<div class="fv-modal-body">'+
-      '<p class="fv-ai-note">Vault AI is your specialised teaching tutor. Paste one (or more) free API key below — keys are saved <b>only on this device</b> and are never uploaded anywhere. Auto mode tries every provider that has a key.</p>'+
-      (AI.configured().length ? '' : '<div class="fv-err" style="margin-bottom:12px">⚠ No provider is set up yet — add at least one key.</div>')+
+      '<p class="fv-ai-note">'+(AI.serverMode()?'This deployed version uses the site\'s built-in API keys — the AI tutor already works, no setup needed. You may still add your own key below as a personal backup. ':'Vault AI is your specialised teaching tutor. Paste one (or more) free API key below. ')+'Keys are saved <b>only on this device</b> and are never uploaded anywhere. Auto mode tries every provider that has a key.</p>'+
+      (!AI.serverMode()&&AI.configured().length===0 ? '<div class="fv-err" style="margin-bottom:12px">⚠ No provider is set up yet — add at least one key.</div>' : '')+
       ['groq','google','openrouter'].map(function(p){
         return '<div class="ai-key-row" data-p="'+p+'">'+
           '<div class="ai-key-head"><b>'+AI.LABEL[p]+'</b><a href="'+AI.HELP[p]+'" target="_blank" rel="noopener">get a free key ↗</a><span class="ai-ok" id="aiChk'+p+'">'+(settings.aiKeys&&settings.aiKeys[p]?'✓ configured':'')+'</span></div>'+
@@ -357,9 +392,9 @@ function openTutor(){
   w.querySelector('#fvProv').onchange=e=>{ settings.provider=e.target.value; store.set('settings',settings); toast('AI provider: '+e.target.value); };
   w.querySelector('#fvNewChat').onclick=()=>{ chatMsgs=[]; store.set('chat',[]); chat.innerHTML=''; add('ai','Fresh start! ✦ What are we revising today?'); renderSug(); };
   if(chatMsgs.length) chatMsgs.forEach(m=>add(m.role==='assistant'?'ai':'user', m.content));
-  else add('ai', AI.configured().length
-    ? "Hey! I'm Vault AI ✦ — your JEE teaching tutor. I can explain formulas, work through derivations, quiz you orally, or plan your revision. What's confusing you today?"
-    : 'Welcome! I\'m Vault AI ✦. To let me teach you, add a free API key (Groq, Google or OpenRouter) in ⚙ AI Settings. Tap ⚙ above and paste any key, then hit Save.');
+  else if(AI.serverMode()||AI.configured().length)
+    add('ai', "Hey! I'm Vault AI ✦ — your JEE teaching tutor. I can explain formulas, work through derivations, quiz you orally, or plan your revision. What's confusing you today?");
+  else add('ai', 'Welcome! I\'m Vault AI ✦. To let me teach you, add a free API key (Groq, Google or OpenRouter) in ⚙ AI Settings. Tap ⚙ above and paste any key, then hit Save.');
   renderSug();
   setTimeout(()=>ta.focus(),150);
 }
