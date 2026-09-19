@@ -6758,7 +6758,6 @@ const SCI_CONSTS=[
   ['au — astronomical unit, m','149597870700']
 ];
 function openCalc(){
-  const catChips='<div class="calc-cats">'+CALC_CATS.map(function(c){ return '<button class="calc-cat-chip'+(c[0]==='all'?' active':'')+'" data-c="'+c[0]+'">'+c[1]+'</button>'; }).join('')+'</div>';
   const constOpts='<option value="">Insert constant…</option>'+SCI_CONSTS.map(function(c){ return '<option value="'+c[1]+'">'+c[0]+'</option>'; }).join('');
   const w=openOverlay(
     '<div class="fv-modal-head"><h3>'+window.__I.calculator+'Calculators</h3><button class="fv-icon-btn" data-close>×</button></div>'+
@@ -6771,7 +6770,7 @@ function openCalc(){
     '</div>'+
     '<div class="fv-modal-body">'+
       '<div class="calc-view active" data-view="formula">'+
-        catChips+
+        '<div class="calc-cats" id="calcCats"></div>'+
         '<div class="calc-tabs" id="calcTabs"></div>'+
         '<div class="calc-grid" id="calcGrid"></div>'+
       '</div>'+
