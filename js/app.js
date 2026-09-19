@@ -658,141 +658,344 @@ const CalcEngine=(function(){
   const FUNCS={
     sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan,
     sec:function(x){return 1/Math.cos(x);}, csc:function(x){return 1/Math.sin(x);}, cot:function(x){return 1/Math.tan(x);},
+    asec:function(x){return Math.acos(1/x);}, acsc:function(x){return Math.asin(1/x);}, acot:function(x){return Math.atan(1/x);},
     sinh:Math.sinh, cosh:Math.cosh, tanh:Math.tanh,
-    ln:Math.log, log:Math.log10, log2:Math.log2,
-    sqrt:Math.sqrt, cbrt:Math.cbrt, abs:Math.abs, exp:Math.exp,
-    floor:Math.floor, ceil:Math.ceil, round:Math.round
+    asinh:Math.asinh, acosh:Math.acosh, atanh:Math.atanh,
+    sech:function(x){return 1/Math.cosh(x);}, csch:function(x){return 1/Math.sinh(x);}, coth:function(x){return 1/Math.tanh(x);},
+    ln:Math.log, log:Math.log10, log2:Math.log2, exp:Math.exp, exp10:function(x){return Math.pow(10,x);},
+    abs:Math.abs, sqrt:Math.sqrt, cbrt:function(x){return Math.cbrt(x);}, sign:function(x){return x>0?1:x<0?-1:0;},
+    round:Math.round, floor:Math.floor, ceil:Math.ceil,
+    gcd:function(a,b){a=Math.abs(~~a);b=Math.abs(~~b);while(b){const t=a%b;a=b;b=t;}return a;},
+    lcm:function(a,b){a=Math.abs(~~a);b=Math.abs(~~b);if(!a||!b)return 0;return a/FUNCS.gcd(a,b)*b;}
   };
-  const CONSTS={ pi:Math.PI, e:Math.E, tau:2*Math.PI };
-  const DEG_TRIG={ sin:1,cos:1,tan:1,sec:1,csc:1,cot:1,sinh:1,cosh:1,tanh:1 };
-  const DEG_INV={ asin:1,acos:1,atan:1 };
-  function normalize(src){ return String(src).replace(/[×∗]/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/π/g,'pi').replace(/√/g,'sqrt'); }
+  const CONSTS={
+    pi:Math.PI, e:Math.E, phi:(1+Math.sqrt(5))/2, tau:2*Math.PI, gamma:0.5772156649015329,
+    g:9.80665, c:299792458, h:6.62607015e-34, hbar:1.054571817e-34, G:6.67430e-11,
+    Na:6.02214076e23, kb:1.380649e-23, R:8.31446261815324, R2:0.08205736608096,
+    Me:9.1093837015e-31, Mp:1.67262192369e-27, Mn:1.67492749804e-27, u:1.66053906660e-27,
+    e0:8.8541878128e-12, mu0:1.25663706212e-6, ke:8.9875517923e9, sigma:5.670374419e-8,
+    a0:5.29177210903e-11, Ffar:96485.33212, Rinf:10973731.568160,
+    atm:101325, torr:133.322368421, cal:4.184, ev:1.602176634e-19, t0:273.15,
+    ly:9.46073047258e15, au:149597870700, minute:60, hour:3600, day:86400
+  };
+  const DEG_TRIG=['sin','cos','tan','sec','csc','cot','sinh','cosh','tanh','sech','csch','coth'];
+  const DEG_INV=['asin','acos','atan','asec','acsc','acot'];
+  function normalize(src){
+    return String(src)
+      .replace(/\s+/g,'')
+      .replace(/\*\*+/g,'^')
+      .replace(/[×·∗]/g,'*')
+      .replace(/÷/g,'/')
+      .replace(/[−–—]/g,'-')
+      .replace(/π/g,'pi').replace(/τ/g,'tau').replace(/φ/g,'phi').replace(/γ/g,'gamma')
+      .replace(/√/g,'sqrt').replace(/∛/g,'cbrt')
+      .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g,function(ch){return '^'+('⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(ch));});
+  }
   function tokenize(src){
-    const toks=[]; let i=0;
-    while(i<src.length){
-      const ch=src[i];
-      if(ch===' '||ch==='\t'||ch==='\n'){ i++; continue; }
-      const nm=/^((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/.exec(src.slice(i));
-      if(nm){ toks.push({t:'num',v:parseFloat(nm[0])}); i+=nm[0].length; continue; }
-      const im=/^[A-Za-z_]+/.exec(src.slice(i));
-      if(im){ toks.push({t:'id',v:im[0].toLowerCase()}); i+=im[0].length; continue; }
-      if(ch==='*'&&src[i+1]==='*'){ toks.push({t:'op',v:'^'}); i+=2; continue; }
-      if(ch===','){ toks.push({t:'comma',v:ch}); i++; continue; }
-      if(ch==='('){ toks.push({t:'lp',v:ch}); i++; continue; }
-      if(ch===')'){ toks.push({t:'rp',v:ch}); i++; continue; }
-      if('+-*/%^!'.indexOf(ch)!==-1){ toks.push({t:'op',v:ch}); i++; continue; }
-      throw new Error('Unexpected character "'+ch+'"');
+    const toks=[];
+    const re=/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?|[+\-*\/\^%,()!]/g;
+    let m; let last=0;
+    while((m=re.exec(src))){
+      if(m.index>last) return {err:'Unexpected character "'+src.slice(last,m.index)+'"'};
+      toks.push(m[0]); last=re.lastIndex;
     }
-    return toks;
+    if(last<src.length) return {err:'Unexpected character "'+src.slice(last)+'"'};
+    return {toks:toks};
   }
-  function applyFn(name,args,deg){
-    const arg=args[0];
-    const input=DEG_TRIG[name]&&deg ? arg*Math.PI/180 : arg;
-    const r = name==='log'&&args.length===2 ? Math.log(args[1])/Math.log(args[0]) : FUNCS[name](input);
-    return DEG_INV[name]&&deg ? r*180/Math.PI : r;
+  function fact(n){
+    if(!isFinite(n)) return NaN;
+    n=Math.round(n);
+    if(n<0||n>170) return NaN;
+    if(n===0||n===1) return 1;
+    let r=1; for(let i=2;i<=n;i++) r*=i;
+    return r;
   }
-  function fact(x){ let r=1; for(let k=2;k<=x;k++) r*=k; return r; }
-  function parse(toks, env){
-    let pos=0;
-    function peek(){ return toks[pos]||null; }
-    function next(){ return toks[pos++]; }
-    function match(t){ const tk=peek(); if(tk&&tk.t===t){ pos++; return true; } return false; }
-    function parseAdd(){ let l=parseMul(); for(;;){ const tk=peek(); if(tk&&tk.t==='op'&&(tk.v==='+'||tk.v==='-')){ next(); const r=parseMul(); l=tk.v==='+'?l+r:l-r; } else return l; } }
-    function parseMul(){ let l=parseUnary(); for(;;){ const tk=peek(); if(tk&&tk.t==='op'&&(tk.v==='*'||tk.v==='/'||tk.v==='%')){ next(); const r=parseUnary(); if(tk.v==='*') l=l*r; else if(tk.v==='/'){ if(r===0) throw new Error('Division by zero'); l=l/r; } else l=l%r; } else if(tk&&(tk.t==='num'||tk.t==='id'||tk.t==='lp')){ const r=parseUnary(); l=l*r; } else return l; } }
-    function parseUnary(){ const tk=peek(); if(tk&&tk.t==='op'&&(tk.v==='-'||tk.v==='+')){ next(); const r=parseUnary(); return tk.v==='-'?-r:r; } return parsePower(); }
-    function parsePower(){ const l=parsePostfix(); const tk=peek(); if(tk&&tk.t==='op'&&tk.v==='^'){ next(); const r=parseUnary(); return Math.pow(l,r); } return l; }
-    function parsePostfix(){ let v=parseAtom(); for(;;){ const tk=peek(); if(tk&&tk.t==='op'&&tk.v==='!'){ next(); if(v<0||v!==Math.floor(v)) throw new Error('Factorial needs a non-negative integer'); v=fact(v); } else return v; } }
-    function parseAtom(){
-      const tk=next();
-      if(!tk) throw new Error('Incomplete expression');
-      if(tk.t==='num') return tk.v;
-      if(tk.t==='lp'){ const v=parseAdd(); if(!match('rp')) throw new Error('Missing closing )'); return v; }
-      if(tk.t==='id'){
-        const name=tk.v;
-        if(name in FUNCS){
-          if(!match('lp')) throw new Error(name+' needs parentheses, e.g. '+name+'(60)');
-          const args=[parseAdd()];
-          while(match('comma')) args.push(parseAdd());
-          if(!match('rp')) throw new Error('Missing closing )');
-          if(args.length>2) throw new Error(name+' accepts at most 2 arguments');
-          return applyFn(name,args,env.deg);
-        }
-        if(name in CONSTS) return CONSTS[name];
-        if(Object.prototype.hasOwnProperty.call(env.vars,name)) return env.vars[name];
-        throw new Error('Unknown symbol "'+tk.v+'"');
+  function parse(toks){
+    let p=0;
+    function peek(){ return toks[p]; }
+    function take(t){ if(t===undefined||toks[p]===t){ p++; return toks[p-1]; } return false; }
+    function parseAdd(){
+      let left=parseMul();
+      if(!left) return null;
+      while(peek()==='+'||peek()==='-'){
+        const op=take();
+        const rhs=parseMul();
+        if(!rhs) return null;
+        left={op:'expr',base:left,ops:[{op:op,rhs:rhs}]};
       }
-      throw new Error('Unexpected token');
+      return left;
     }
-    const v=parseAdd();
-    if(pos<toks.length) throw new Error('Unexpected input');
-    return v;
+    function parseMul(){
+      let left=parsePow();
+      if(!left) return null;
+      for(;;){
+        const t=peek();
+        if(t==='*'||t==='/'||t==='%'){
+          take(); const rhs=parsePow(); if(!rhs) return null;
+          left={op:'expr',base:left,ops:[{op:t,rhs:rhs}]};
+          continue;
+        }
+        if(t&&/^[0-9A-Za-z_(]/.test(t)){
+          const rhs=parsePow(); if(!rhs) return null;
+          left={op:'expr',base:left,ops:[{op:'*',rhs:rhs}]};
+          continue;
+        }
+        break;
+      }
+      return left;
+    }
+    function parsePow(){
+      const left=parseSign();
+      if(!left) return null;
+      if(take('^')){
+        const right=parsePow();
+        if(!right) return null;
+        return {op:'expr',base:left,ops:[{op:'^',rhs:right}]};
+      }
+      return left;
+    }
+    function parseSign(){
+      const t=peek();
+      if(t==='-'||t==='+'){
+        take();
+        const rhs=parseSign();
+        if(!rhs) return null;
+        return {op:'neg',rhs:rhs};
+      }
+      return parseSimplest();
+    }
+    function parseSimplest(){
+      const t=peek();
+      if(t==='!'){
+        take();
+        const inner=parseSimplest();
+        if(!inner) return null;
+        return {op:'fact',child:inner};
+      }
+      let node;
+      if(t==='('){
+        take();
+        const inner=parseAdd();
+        if(!inner) return null;
+        if(!take(')')) return null;
+        node={op:'group',child:inner};
+      } else if(t&&(/^\d/.test(t)||t.charAt(0)==='.')){
+        take();
+        if(!(/^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(t))) return null;
+        node={op:'const',v:parseFloat(t)};
+      } else if(t&&/^[A-Za-z_]/.test(t)){
+        take();
+        const name=t.toLowerCase();
+        if(take('(')){
+          const args=[];
+          if(peek()===')') return null;
+          const a1=parseAdd();
+          if(!a1) return null;
+          args.push(a1);
+          while(take(',')){
+            const an=parseAdd();
+            if(!an) return null;
+            args.push(an);
+          }
+          if(!take(')')) return null;
+          node={op:'call',fn:name,args:args};
+        } else {
+          node={op:'const',symbol:name};
+        }
+      } else {
+        return null;
+      }
+      while(take('!')){ node={op:'fact',child:node}; }
+      return node;
+    }
+    const root=parseAdd();
+    if(!root) return {err:'Invalid expression'};
+    if(p<toks.length) return {err:'Unexpected "'+toks[p]+'"'};
+    return {node:root};
+  }
+  function evalNode(node,env){
+    if(!node) return NaN;
+    switch(node.op){
+      case 'expr': {
+        let val=evalNode(node.base,env);
+        for(let i=0;i<node.ops.length;i++){
+          const o=node.ops[i];
+          const rv=evalNode(o.rhs,env);
+          if(!isFinite(val)||!isFinite(rv)) return NaN;
+          if(o.op==='+') val+=rv;
+          else if(o.op==='-') val-=rv;
+          else if(o.op==='*') val*=rv;
+          else if(o.op==='/'){ if(rv===0) return NaN; val/=rv; }
+          else if(o.op==='%') val%=rv;
+          else val=Math.pow(val,rv);
+        }
+        return isFinite(val)?val:NaN;
+      }
+      case 'const': {
+        if(node.symbol){
+          if(env.vars&&Object.prototype.hasOwnProperty.call(env.vars,node.symbol)) return env.vars[node.symbol];
+          return (CONSTS[node.symbol]===undefined)?NaN:CONSTS[node.symbol];
+        }
+        return node.v;
+      }
+      case 'neg': return -evalNode(node.rhs,env);
+      case 'fact': return fact(evalNode(node.child,env));
+      case 'group': return evalNode(node.child,env);
+      case 'call': {
+        const fn=FUNCS[node.fn];
+        if(!fn) return NaN;
+        const args=node.args.map(function(a){return evalNode(a,env);});
+        if(args.some(function(a){return !isFinite(a);})) return NaN;
+        if(node.fn==='log'&&args.length===2) return Math.log(args[1])/Math.log(args[0]);
+        if(DEG_TRIG.indexOf(node.fn)>-1) return fn(args[0]*env.deg);
+        if(DEG_INV.indexOf(node.fn)>-1) return fn(args[0])*env.rad;
+        return fn.apply(null,args);
+      }
+    }
+    return NaN;
+  }
+  function compile(src,opts){
+    opts=opts||{};
+    const s=normalize(src||'');
+    if(!s) return {ok:false,error:'Type an expression…'};
+    const tk=tokenize(s);
+    if(tk.err) return {ok:false,error:tk.err};
+    const pr=parse(tk.toks);
+    if(pr.err||!pr.node) return {ok:false,error:pr.err||'Invalid expression'};
+    const deg=opts.deg?Math.PI/180:1;
+    return {ok:true,node:pr.node,deg:deg,rad:1/deg};
   }
   function evaluate(expr,opts){
-    opts=opts||{};
-    const env={ deg: !!opts.deg, vars: Object.assign({ans:0}, opts.vars||{}) };
-    try{
-      const toks=tokenize(normalize(expr));
-      if(!toks.length) return {ok:false, error:'Type an expression…'};
-      return {ok:true, value:parse(toks,env)};
-    }catch(e){ return {ok:false, error:(e&&e.message)||'Invalid expression'}; }
+    const c=compile(expr,opts);
+    if(!c.ok) return {ok:false,error:c.error};
+    const v=evalNode(c.node,{deg:c.deg,rad:c.rad,vars:Object.assign({ans:0},(opts&&opts.vars)||{})});
+    if(!isFinite(v)) return {ok:false,error:'Result is not a valid number'};
+    return {ok:true,value:v};
   }
-  return { eval:evaluate };
+  return {
+    eval:evaluate,
+    compile:compile,
+    fn:function(c){ return function(vars){ let v=evalNode(c.node,{deg:c.deg,rad:c.rad,vars:vars||{}}); return isFinite(v)?v:NaN; }; }
+  };
 })();
+const CALC_CATS=[['all','All'],['phys','Physics'],['chem','Chemistry'],['math','Math']];
+const CALC_CAT_NAMES={phys:'Physics',chem:'Chemistry',math:'Math'};
 const CALCS={
-  proj:{ic:'rocket',name:'Projectile',formula:'T = 2u·sinθ/g &nbsp; H = u²sin²θ/(2g) &nbsp; R = u²sin2θ/g',fields:[['u','Initial speed u (m/s)'],['th','Angle θ (°)']],compute:function(v){ const u=+v.u, thd=+v.th; if(!(u>0)) return 'Enter a positive initial speed u.'; if(isNaN(thd)) return 'Enter the launch angle θ.'; const th=thd*Math.PI/180, g=9.8; const T=2*u*Math.sin(th)/g, H=u*u*Math.pow(Math.sin(th),2)/(2*g), R=u*u*Math.sin(2*th)/g; return '<b>Time of flight T = '+fmtN(T,2)+' s</b><br><b>Max height H = '+fmtN(H,2)+' m</b><br><b>Range R = '+fmtN(R,2)+' m</b>'; }},
-  kin:{ic:'gauge',name:'Kinematics',formula:'v = u + at &nbsp; s = ut + ½at²',fields:[['u','Initial velocity u (m/s)'],['a','Acceleration a (m/s²)'],['t','Time t (s)']],compute:function(v){ const u=+v.u,a=+v.a,t=+v.t; if(isNaN(u)||isNaN(a)||isNaN(t)) return 'Enter u, a and t to get v and s.'; return '<b>v = '+fmtN(u+a*t,2)+' m/s</b><br><b>s = '+fmtN(u*t+0.5*a*t*t,2)+' m</b>'; }},
-  fall:{ic:'layers',name:'Free fall',formula:'v = gt &nbsp; h = ½gt² &nbsp; v = √(2gh)',fields:[['h','Height h (m) — leave blank if using t'],['t','Time t (s) — leave blank if using h']],compute:function(v){ const g=9.8, h=+v.h, t=+v.t; const hasH=h>0, hasT=t>0; if(!hasH&&!hasT) return 'Enter a positive height or time.'; let H,T,V; if(hasH){ H=h; T=Math.sqrt(2*h/g); V=Math.sqrt(2*g*h); } else { T=t; H=0.5*g*t*t; V=g*t; } return '<b>Fallen height h = '+fmtN(H,2)+' m</b><br><b>Time to land t = '+fmtN(T,2)+' s</b><br><b>Impact speed v = '+fmtN(V,2)+' m/s</b>'; }},
-  spring:{ic:'x',name:'Spring energy',formula:'F = kx &nbsp; U = ½kx²',fields:[['k','Spring constant k (N/m)'],['x','Displacement x (m)']],compute:function(v){ const k=+v.k,x=+v.x; if(isNaN(k)||isNaN(x)) return 'Enter k and x.'; return '<b>Force F = '+fmtN(k*x,2)+' N</b><br><b>Potential energy U = '+fmtN(0.5*k*x*x,2)+' J</b>'; }},
-  pend:{ic:'settings',name:'Pendulum',formula:'T = 2π√(L/g)',fields:[['L','Pendulum length L (m)'],['g','Gravity g (m/s²)']],compute:function(v){ const L=+v.L,g=+v.g||9.8; if(!(L>0)||!(g>0)) return 'Enter a positive length L.'; const T=2*Math.PI*Math.sqrt(L/g); return '<b>Period T = '+fmtN(T,2)+' s</b><br><b>Frequency f = '+fmtN(1/T,3)+' Hz</b>'; }},
-  ohm:{ic:'zap',name:"Ohm's law",formula:'V = IR &nbsp; P = VI',fields:[['V','Voltage V (V) — leave one blank'],['I','Current I (A)'],['R','Resistance R (Ω)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); const V=f(v.V)?+v.V:null, I=f(v.I)?+v.I:null, R=f(v.R)?+v.R:null; if(V!==null&&I!==null&&R===null) R=V/I; else if(V!==null&&R!==null&&I===null) I=V/R; else if(I!==null&&R!==null&&V===null) V=I*R; else return 'Fill any two of V, I, R.'; return '<b>V = '+fmtN(V,2)+' V</b><br><b>I = '+fmtN(I,2)+' A</b><br><b>R = '+fmtN(R,2)+' Ω</b><br><b>Power P = '+fmtN(V*I,2)+' W</b>'; }},
-  res:{ic:'target',name:'Resistors',formula:'Series: R = R₁+R₂ &nbsp; Parallel: R = R₁R₂/(R₁+R₂)',fields:[['r1','Resistor R₁ (Ω)'],['r2','Resistor R₂ (Ω)']],compute:function(v){ const r1=+v.r1,r2=+v.r2; if(!(r1>0)||!(r2>0)) return 'Enter two positive resistances.'; return '<b>Series equivalent = '+fmtN(r1+r2,2)+' Ω</b><br><b>Parallel equivalent = '+fmtN(r1*r2/(r1+r2),2)+' Ω</b>'; }},
-  energy:{ic:'sparkles',name:'Kinetic energy',formula:'KE = ½mv²',fields:[['m','Mass m (kg)'],['v','Speed v (m/s)']],compute:function(v){ const m=+v.m,vv=+v.v; if(!(m>0)||!(vv>0)) return 'Enter positive mass and speed.'; return '<b>KE = '+fmtN(0.5*m*vv*vv,2)+' J</b>'; }},
-  cent:{ic:'bookmark',name:'Centripetal',formula:'a = v²/r &nbsp; F = mv²/r',fields:[['m','Mass m (kg)'],['v','Speed v (m/s)'],['r','Radius r (m)']],compute:function(v){ const m=+v.m,vv=+v.v,r=+v.r; if(isNaN(m)||isNaN(vv)||!(r>0)) return 'Enter mass, speed and a positive radius.'; const a=vv*vv/r; return '<b>Centripetal acceleration a = '+fmtN(a,2)+' m/s²</b><br><b>Centripetal force F = '+fmtN(m*a,2)+' N</b>'; }},
-  grav:{ic:'moon',name:'Gravitation',formula:'F = Gm₁m₂/r²',fields:[['m1','Mass m₁ (kg)'],['m2','Mass m₂ (kg)'],['r','Separation r (m)']],compute:function(v){ const m1=+v.m1,m2=+v.m2,r=+v.r; if(isNaN(m1)||isNaN(m2)||!(r>0)) return 'Enter masses and a positive separation.'; return '<b>Force F = '+fmtN(6.674e-11*m1*m2/(r*r),3)+' N</b>'; }},
-  orbit:{ic:'star',name:'Orbital motion',formula:'v = √(GM/r) &nbsp; T = 2π√(r³/GM)',fields:[['M','Central mass M (kg)'],['r','Orbit radius r (m)']],compute:function(v){ const M=+v.M,r=+v.r; if(!(M>0)||!(r>0)) return 'Enter a positive central mass and radius.'; const G=6.674e-11, vOrb=Math.sqrt(G*M/r), T=2*Math.PI*Math.sqrt(r*r*r/(G*M)); return '<b>Orbital speed v = '+fmtN(vOrb,2)+' m/s</b><br><b>Orbital period T = '+fmtN(T,2)+' s</b>'; }},
-  eff:{ic:'fileText',name:'Efficiency',formula:'η = W_out/W_in × 100%',fields:[['win','Energy input W_in (J)'],['wout','Useful output W_out (J)']],compute:function(v){ const win=+v.win,wout=+v.wout; if(!(win>0)||isNaN(wout)) return 'Enter energy input and output.'; return '<b>Efficiency η = '+fmtN(wout/win*100,2)+'%</b><br><b>Loss = '+fmtN(win-wout,2)+' J</b>'; }},
-  wave:{ic:'printer',name:'Wave speed',formula:'v = f·λ &nbsp; T = 1/f',fields:[['v','Wave speed v (m/s)'],['f','Frequency f (Hz)']],compute:function(v){ const vv=+v.v,f=+v.f; if(!(vv>0)||!(f>0)) return 'Enter positive speed and frequency.'; return '<b>Wavelength λ = '+fmtN(vv/f,3)+' m</b><br><b>Period T = '+fmtN(1/f,3)+' s</b>'; }},
-  heat:{ic:'messagePlus',name:'Heat transfer',formula:'Q = mcΔT',fields:[['m','Mass m (kg)'],['c','Specific heat c (J/kg·K)'],['dt','Temperature change ΔT (K or °C)']],compute:function(v){ const m=+v.m,c=+v.c,dt=+v.dt; if(isNaN(m)||isNaN(c)||isNaN(dt)) return 'Enter m, c and ΔT.'; return '<b>Q = '+fmtN(m*c*dt,2)+' J</b>'; }},
-  gas:{ic:'wind',name:'Ideal gas',formula:'PV = nRT &nbsp; R = 8.314 J/mol·K',fields:[['P','Pressure P (Pa) — leave one blank'],['V','Volume V (m³)'],['n','Moles n (mol)'],['T','Temperature T (K)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); const R=8.314; const P=f(v.P)?+v.P:null, V=f(v.V)?+v.V:null, n=f(v.n)?+v.n:null, T=f(v.T)?+v.T:null; if([P,V,n,T].filter(x=>x!==null).length!==3) return 'Fill exactly three of P, V, n, T.'; let p=P,Vv=V,nn=n,tt=T; if(p===null)p=nn*R*tt/Vv; if(Vv===null)Vv=nn*R*tt/p; if(nn===null)nn=p*Vv/(R*tt); if(tt===null)tt=p*Vv/(nn*R); return '<b>P = '+fmtN(p,2)+' Pa</b><br><b>V = '+fmtN(Vv,3)+' m³</b><br><b>n = '+fmtN(nn,3)+' mol</b><br><b>T = '+fmtN(tt,2)+' K</b>'; }},
-  acid:{ic:'flask',name:'pH & [H⁺]',formula:'pH = −log₁₀[H⁺] &nbsp; pOH = 14 − pH',fields:[['h','[H⁺] concentration (M)']],compute:function(v){ const h=+v.h; if(!(h>0)) return 'Enter a positive [H⁺] concentration.'; const pH=-Math.log10(h), pOH=14-pH; return '<b>pH = '+fmtN(pH,2)+'</b><br><b>pOH = '+fmtN(pOH,2)+'</b><br><b>[OH⁻] = '+fmtN(Math.pow(10,-pOH),4)+' M</b>'; }},
-  buffer:{ic:'droplet',name:'Buffer pH',formula:'pH = pKₐ + log([salt]/[acid])',fields:[['pka','pKₐ of the weak acid'],['a','[Acid] concentration (M)'],['s','[Conjugate base] concentration (M)']],compute:function(v){ const pka=+v.pka,a=+v.a,s=+v.s; if(isNaN(pka)||!(a>0)||!(s>0)) return 'Enter pKₐ and positive concentrations.'; const pH=pka+Math.log10(s/a); return '<b>pH = '+fmtN(pH,2)+'</b><br><b>[H⁺] = '+fmtN(Math.pow(10,-pH),4)+' M</b>'; }},
-  mol:{ic:'calculator',name:'Molarity',formula:'M = n/V (volume in litres)',fields:[['n','Moles of solute (mol)'],['V','Volume of solution (L)']],compute:function(v){ const n=+v.n,V=+v.V; if(!(n>0)||!(V>0)) return 'Enter moles and volume (positive).'; return '<b>Molarity M = '+fmtN(n/V,4)+' mol/L</b>'; }},
-  dil:{ic:'history',name:'Dilution',formula:'M₁V₁ = M₂V₂',fields:[['m1','Initial concentration M₁ (M)'],['v1','Initial volume V₁ (L)'],['v2','Final volume V₂ (L)']],compute:function(v){ const m1=+v.m1,v1=+v.v1,v2=+v.v2; if(!(m1>0)||!(v1>0)||!(v2>0)) return 'Enter positive values.'; return '<b>Final concentration M₂ = '+fmtN(m1*v1/v2,4)+' M</b>'; }},
-  half:{ic:'target',name:'Half-life',formula:'λ = ln2/t½ &nbsp; fraction = 2^(−t/t½)',fields:[['th','Half-life t½ (s or any time unit)'],['t','Elapsed time t (same unit)']],compute:function(v){ const th=+v.th,t=+v.t; if(!(th>0)||!(t>=0)) return 'Enter a positive half-life and an elapsed time.'; const lam=Math.LN2/th, rem=Math.pow(2,-t/th); return '<b>Decay constant λ = '+fmtN(lam,4)+' s⁻¹</b><br><b>Fraction remaining = '+fmtN(rem,4)+' ('+fmtN(rem*100,2)+'%)</b>'; }},
-  quad:{ic:'fn',name:'Quadratic',formula:'x = (−b ± √(b² − 4ac)) / 2a',fields:[['a','a (x² coefficient)'],['b','b (x coefficient)'],['c','c (constant)']],compute:function(v){ const a=+v.a,b=+v.b,c=+v.c; if(isNaN(a)||isNaN(b)||isNaN(c)) return 'Enter a, b and c.'; if(a===0) return b===0?'Not a quadratic equation.':'Linear root: x = '+fmtN(-c/b,4); const D=b*b-4*a*c; let roots; if(D>0) roots='x₁ = '+fmtN((-b+Math.sqrt(D))/(2*a),4)+', x₂ = '+fmtN((-b-Math.sqrt(D))/(2*a),4); else if(D===0) roots='x = '+fmtN(-b/(2*a),4); else roots='x = '+fmtN(-b/(2*a),4)+' ± '+fmtN(Math.sqrt(-D)/(2*a),4)+'i'; return '<b>Discriminant D = '+fmtN(D,2)+'</b> ('+(D>0?'two real roots':D===0?'one repeated root':'complex roots')+')<br><b>'+roots+'</b>'; }},
-  err:{ic:'droplet',name:'% Error',formula:'% error = |true − measured| / |true| × 100',fields:[['tv','True value'],['mv','Measured value']],compute:function(v){ const t=+v.tv,m=+v.mv; if(isNaN(t)||isNaN(m)||t===0) return 'Enter both values — the true value cannot be 0.'; const ae=Math.abs(t-m); return '<b>Absolute error = '+fmtN(ae,4)+'</b><br><b>Percentage error = '+fmtN(ae/Math.abs(t)*100,2)+'%</b>'; }}
+  proj:{ic:'rocket',cat:'phys',name:'Projectile',formula:'T = 2u·sinθ/g &nbsp; H = u²sin²θ/(2g) &nbsp; R = u²sin2θ/g',fields:[['u','Initial speed u (m/s)'],['th','Angle θ (°)']],compute:function(v){ const u=+v.u, thd=+v.th; if(!(u>0)) return 'Enter a positive initial speed u.'; if(isNaN(thd)) return 'Enter the launch angle θ.'; const th=thd*Math.PI/180, g=9.8; const T=2*u*Math.sin(th)/g, H=u*u*Math.pow(Math.sin(th),2)/(2*g), R=u*u*Math.sin(2*th)/g; return '<b>Time of flight T = '+fmtN(T,2)+' s</b><br><b>Max height H = '+fmtN(H,2)+' m</b><br><b>Range R = '+fmtN(R,2)+' m</b>'; }},
+  kin:{ic:'gauge',cat:'phys',name:'Kinematics',formula:'v = u + at &nbsp; s = ut + ½at²',fields:[['u','Initial velocity u (m/s)'],['a','Acceleration a (m/s²)'],['t','Time t (s)']],compute:function(v){ const u=+v.u,a=+v.a,t=+v.t; if(isNaN(u)||isNaN(a)||isNaN(t)) return 'Enter u, a and t to get v and s.'; return '<b>v = '+fmtN(u+a*t,2)+' m/s</b><br><b>s = '+fmtN(u*t+0.5*a*t*t,2)+' m</b>'; }},
+  fall:{ic:'layers',cat:'phys',name:'Free fall',formula:'v = gt &nbsp; h = ½gt² &nbsp; v = √(2gh)',fields:[['h','Height h (m) — leave blank if using t'],['t','Time t (s) — leave blank if using h']],compute:function(v){ const g=9.8, h=+v.h, t=+v.t; const hasH=h>0, hasT=t>0; if(!hasH&&!hasT) return 'Enter a positive height or time.'; let H,T,V; if(hasH){ H=h; T=Math.sqrt(2*h/g); V=Math.sqrt(2*g*h); } else { T=t; H=0.5*g*t*t; V=g*t; } return '<b>Fallen height h = '+fmtN(H,2)+' m</b><br><b>Time to land t = '+fmtN(T,2)+' s</b><br><b>Impact speed v = '+fmtN(V,2)+' m/s</b>'; }},
+  spring:{ic:'x',cat:'phys',name:'Spring energy',formula:'F = kx &nbsp; U = ½kx²',fields:[['k','Spring constant k (N/m)'],['x','Displacement x (m)']],compute:function(v){ const k=+v.k,x=+v.x; if(isNaN(k)||isNaN(x)) return 'Enter k and x.'; return '<b>Force F = '+fmtN(k*x,2)+' N</b><br><b>Potential energy U = '+fmtN(0.5*k*x*x,2)+' J</b>'; }},
+  pend:{ic:'settings',cat:'phys',name:'Pendulum',formula:'T = 2π√(L/g)',fields:[['L','Pendulum length L (m)'],['g','Gravity g (m/s²)']],compute:function(v){ const L=+v.L,g=+v.g||9.8; if(!(L>0)||!(g>0)) return 'Enter a positive length L.'; const T=2*Math.PI*Math.sqrt(L/g); return '<b>Period T = '+fmtN(T,2)+' s</b><br><b>Frequency f = '+fmtN(1/T,3)+' Hz</b>'; }},
+  shm:{ic:'settings',cat:'phys',name:'SHM',formula:'ω = √(k/m) &nbsp; T = 2π√(m/k)',fields:[['k','Spring constant k (N/m)'],['m','Mass m (kg)'],['A','Amplitude A (m) — optional']],compute:function(v){ const k=+v.k,m=+v.m,A=+v.A; if(!(k>0)||!(m>0)) return 'Enter positive k and m.'; const w=Math.sqrt(k/m), T=2*Math.PI*Math.sqrt(m/k); let out='<b>Angular frequency ω = '+fmtN(w,3)+' rad/s</b><br><b>Period T = '+fmtN(T,3)+' s</b><br><b>Frequency f = '+fmtN(1/T,3)+' Hz</b>'; if(v.A.trim()!==''&&isFinite(+v.A)) out+='<br><b>v_max = '+fmtN(w*A,3)+' m/s</b><br><b>a_max = '+fmtN(w*w*A,3)+' m/s²</b>'; return out; }},
+  ohm:{ic:'zap',cat:'phys',name:"Ohm's law",formula:'V = IR &nbsp; P = VI',fields:[['V','Voltage V (V) — leave one blank'],['I','Current I (A)'],['R','Resistance R (Ω)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); let V=f(v.V)?+v.V:null, I=f(v.I)?+v.I:null, R=f(v.R)?+v.R:null; if(V!==null&&I!==null&&R===null) R=V/I; else if(V!==null&&R!==null&&I===null) I=V/R; else if(I!==null&&R!==null&&V===null) V=I*R; else return 'Fill any two of V, I, R.'; return '<b>V = '+fmtN(V,2)+' V</b><br><b>I = '+fmtN(I,2)+' A</b><br><b>R = '+fmtN(R,2)+' Ω</b><br><b>Power P = '+fmtN(V*I,2)+' W</b>'; }},
+  res:{ic:'target',cat:'phys',name:'Resistors',formula:'Series: R = R₁+R₂ &nbsp; Parallel: R = R₁R₂/(R₁+R₂)',fields:[['r1','Resistor R₁ (Ω)'],['r2','Resistor R₂ (Ω)']],compute:function(v){ const r1=+v.r1,r2=+v.r2; if(!(r1>0)||!(r2>0)) return 'Enter two positive resistances.'; return '<b>Series equivalent = '+fmtN(r1+r2,2)+' Ω</b><br><b>Parallel equivalent = '+fmtN(r1*r2/(r1+r2),2)+' Ω</b>'; }},
+  cap:{ic:'layers',cat:'phys',name:'Capacitor',formula:'Q = CV &nbsp; U = ½CV²',fields:[['C','Capacitance C (F)'],['V','Voltage V (V)'],['Q','Charge Q (C)']],compute:function(v){ const gC=v.C.trim()!==''&&+v.C>0, gV=v.V.trim()!==''&&isFinite(+v.V), gQ=v.Q.trim()!==''&&isFinite(+v.Q); if((gC?1:0)+(gV?1:0)+(gQ?1:0)!==2) return 'Enter any two of C, V, Q.'; let c,vd,q; if(gC&&gV){ c=+v.C; vd=+v.V; q=c*vd; } else if(gC&&gQ){ c=+v.C; q=+v.Q; vd=q/c; } else { vd=+v.V; q=+v.Q; c=q/vd; } const U=0.5*q*vd; return '<b>Charge Q = '+fmtN(q,4)+' C</b><br><b>Voltage V = '+fmtN(vd,4)+' V</b><br><b>Capacitance C = '+fmtN(c,6)+' F</b><br><b>Energy U = ½CV² = '+fmtN(U,5)+' J</b>'; }},
+  energy:{ic:'sparkles',cat:'phys',name:'Kinetic energy',formula:'KE = ½mv²',fields:[['m','Mass m (kg)'],['v','Speed v (m/s)']],compute:function(v){ const m=+v.m,vv=+v.v; if(!(m>0)||!(vv>0)) return 'Enter positive mass and speed.'; return '<b>KE = '+fmtN(0.5*m*vv*vv,2)+' J</b>'; }},
+  cent:{ic:'bookmark',cat:'phys',name:'Centripetal',formula:'a = v²/r &nbsp; F = mv²/r',fields:[['m','Mass m (kg)'],['v','Speed v (m/s)'],['r','Radius r (m)']],compute:function(v){ const m=+v.m,vv=+v.v,r=+v.r; if(isNaN(m)||isNaN(vv)||!(r>0)) return 'Enter mass, speed and a positive radius.'; const a=vv*vv/r; return '<b>Centripetal acceleration a = '+fmtN(a,2)+' m/s²</b><br><b>Centripetal force F = '+fmtN(m*a,2)+' N</b>'; }},
+  grav:{ic:'moon',cat:'phys',name:'Gravitation',formula:'F = Gm₁m₂/r²',fields:[['m1','Mass m₁ (kg)'],['m2','Mass m₂ (kg)'],['r','Separation r (m)']],compute:function(v){ const m1=+v.m1,m2=+v.m2,r=+v.r; if(isNaN(m1)||isNaN(m2)||!(r>0)) return 'Enter masses and a positive separation.'; return '<b>Force F = '+fmtN(6.674e-11*m1*m2/(r*r),3)+' N</b>'; }},
+  orbit:{ic:'star',cat:'phys',name:'Orbital motion',formula:'v = √(GM/r) &nbsp; T = 2π√(r³/GM)',fields:[['M','Central mass M (kg)'],['r','Orbit radius r (m)']],compute:function(v){ const M=+v.M,r=+v.r; if(!(M>0)||!(r>0)) return 'Enter a positive central mass and radius.'; const G=6.674e-11, vOrb=Math.sqrt(G*M/r), T=2*Math.PI*Math.sqrt(r*r*r/(G*M)); return '<b>Orbital speed v = '+fmtN(vOrb,2)+' m/s</b><br><b>Orbital period T = '+fmtN(T,2)+' s</b>'; }},
+  dopp:{ic:'sparkles',cat:'phys',name:'Doppler',formula:'f′ = f·(c+v₀)/(c−vₛ)',fields:[['f0','Source frequency f (Hz)'],['c','Wave speed c (m/s)'],['vs','Source speed vₛ (m/s, + toward listener)'],['vo','Listener speed v₀ (m/s, + toward source)']],compute:function(v){ const f0=+v.f0,c=+v.c,vs=+v.vs,vo=+v.vo; if(!(f0>0)||!(c>0)) return 'Enter a positive source frequency and wave speed.'; if(Math.abs(vs)>=c||Math.abs(vo)>=c) return 'Speeds must be below the wave speed c.'; return '<b>Observed frequency f′ = '+fmtN(f0*(c+vo)/(c-vs),3)+' Hz</b>'; }},
+  string:{ic:'target',cat:'phys',name:'String harmonics',formula:'f₁ = √(T/μ)/(2L) &nbsp; fₙ = f₁·n',fields:[['L','String length L (m)'],['T','Tension T (N)'],['mu','Linear density μ (kg/m)'],['n','Harmonic n — optional']],compute:function(v){ const L=+v.L,T=+v.T,mu=+v.mu; if(!(L>0)||!(mu>0)) return 'Enter a positive length and linear density.'; const f1=Math.sqrt(T/mu)/(2*L); let out='<b>Fundamental f₁ = '+fmtN(f1,3)+' Hz</b>'; if(v.n.trim()!==''&&+v.n>=1&&isFinite(+v.n)) out+='<br><b>Harmonic n = '+fmtN((+v.n)*f1,3)+' Hz</b>'; return out; }},
+  wave:{ic:'printer',cat:'phys',name:'Wave speed',formula:'v = f·λ &nbsp; T = 1/f',fields:[['v','Wave speed v (m/s)'],['f','Frequency f (Hz)']],compute:function(v){ const vv=+v.v,f=+v.f; if(!(vv>0)||!(f>0)) return 'Enter positive speed and frequency.'; return '<b>Wavelength λ = '+fmtN(vv/f,3)+' m</b><br><b>Period T = '+fmtN(1/f,3)+' s</b>'; }},
+  heat:{ic:'messagePlus',cat:'phys',name:'Heat transfer',formula:'Q = mcΔT',fields:[['m','Mass m (kg)'],['c','Specific heat c (J/kg·K)'],['dt','Temperature change ΔT (K or °C)']],compute:function(v){ const m=+v.m,c=+v.c,dt=+v.dt; if(isNaN(m)||isNaN(c)||isNaN(dt)) return 'Enter m, c and ΔT.'; return '<b>Q = '+fmtN(m*c*dt,2)+' J</b>'; }},
+  gas:{ic:'wind',cat:'phys',name:'Ideal gas',formula:'PV = nRT &nbsp; R = 8.314 J/mol·K',fields:[['P','Pressure P (Pa) — leave one blank'],['V','Volume V (m³)'],['n','Moles n (mol)'],['T','Temperature T (K)']],compute:function(v){ const f=x=>x!==''&&!isNaN(+x); const R=8.314; const P=f(v.P)?+v.P:null, V=f(v.V)?+v.V:null, n=f(v.n)?+v.n:null, T=f(v.T)?+v.T:null; if([P,V,n,T].filter(x=>x!==null).length!==3) return 'Fill exactly three of P, V, n, T.'; let p=P,Vv=V,nn=n,tt=T; if(p===null)p=nn*R*tt/Vv; if(Vv===null)Vv=nn*R*tt/p; if(nn===null)nn=p*Vv/(R*tt); if(tt===null)tt=p*Vv/(nn*R); return '<b>P = '+fmtN(p,2)+' Pa</b><br><b>V = '+fmtN(Vv,3)+' m³</b><br><b>n = '+fmtN(nn,3)+' mol</b><br><b>T = '+fmtN(tt,2)+' K</b>'; }},
+  lens:{ic:'droplet',cat:'phys',name:'Thin lens',formula:'1/f = 1/v + 1/u &nbsp; m = v/u &nbsp; P = 100/f (cm)',fields:[['u','Object distance u (cm, signed)'],['v','Image distance v (cm, signed)']],compute:function(v){ const u=+v.u,vv=+v.v; if(v.u.trim()===''||v.v.trim()==='') return 'Enter both signed distances u and v.'; if(u===0||vv===0||u+vv===0) return 'Enter non-zero distances; u + v cannot be zero.'; const f=u*vv/(u+vv); return '<b>Focal length f = '+fmtN(f,2)+' cm</b><br><b>Magnification m = '+fmtN(vv/u,3)+'</b><br><b>Power P = '+fmtN(100/f,3)+' D</b>'; }},
+  mirror:{ic:'layers',cat:'phys',name:'Spherical mirror',formula:'1/f = 1/v + 1/u &nbsp; m = −v/u &nbsp; R = 2f',fields:[['u','Object distance u (cm, signed)'],['v','Image distance v (cm, signed)']],compute:function(v){ const u=+v.u,vv=+v.v; if(v.u.trim()===''||v.v.trim()==='') return 'Enter both signed distances u and v.'; if(u===0||vv===0||u+vv===0) return 'Enter non-zero distances; u + v cannot be zero.'; const f=u*vv/(u+vv); return '<b>Focal length f = '+fmtN(f,2)+' cm</b><br><b>Radius R = '+fmtN(2*f,2)+' cm</b><br><b>Magnification m = '+fmtN(-vv/u,3)+'</b>'; }},
+  snell:{ic:'wind',cat:'phys',name:'Refraction',formula:'n₁ sinθ₁ = n₂ sinθ₂ &nbsp; sinθc = n₂/n₁',fields:[['n1','n₁ (incident medium)'],['n2','n₂ (refracted medium)'],['th1','Incident angle θ₁ (°)']],compute:function(v){ const n1=+v.n1,n2=+v.n2; if(!(n1>0)||!(n2>0)) return 'Enter positive refractive indices n₁ and n₂.'; let out=''; if(v.th1.trim()!==''&&isFinite(+v.th1)){ const th=Math.abs(+v.th1); const s=n1*Math.sin(th*Math.PI/180)/n2; if(s>1) out='<b>Total internal reflection — no refracted ray.</b>'; else out='<b>Refracted angle θ₂ = '+fmtN(Math.asin(s)*180/Math.PI,2)+'°</b>'; } if(n1>n2){ const crit=Math.asin(n2/n1)*180/Math.PI; out+=(out?'<br>':'')+'<b>Critical angle θc = '+fmtN(crit,2)+'°</b>'; } return out||'Enter an incident angle (and n₁ &gt; n₂ to get the critical angle).'; }},
+  buoy:{ic:'droplet',cat:'phys',name:'Buoyancy',formula:'F_b = ρgV &nbsp; floats when ρ_body &lt; ρ_liquid',fields:[['rf','Liquid density ρ_local (kg/m³)'],['rb','Body density ρ_body (kg/m³)'],['vol','Volume submerged V (m³) — optional']],compute:function(v){ const rf=+v.rf,rb=+v.rb,vol=+v.vol; if(!(rf>0)||!(rb>0)) return 'Enter positive liquid and body densities.'; let out=rb<rf?'<b>Body floats — '+fmtN(rb/rf*100,2)+'% submerged</b>':'<b>Body sinks (ρ_body ≥ ρ_liquid)</b>'; if(v.vol.trim()!==''&&+v.vol>0) out+='<br><b>Buoyant force F_b = '+fmtN(rf*9.8*vol,3)+' N</b>'; return out; }},
+  galt:{ic:'moon',cat:'phys',name:'Gravity at altitude',formula:'g(h) = g₀·(R/(R+h))²',fields:[['h','Altitude h (m)']],compute:function(v){ const h=+v.h; if(v.h.trim()===''||!(h>=0)||!isFinite(+v.h)) return 'Enter a non-negative altitude above the surface.'; const g=9.80665*Math.pow(6371e3/(6371e3+h),2); return '<b>g = '+fmtN(g,4)+' m/s²</b> at '+fmtN(h,1)+' m altitude'; }},
+  mom:{ic:'gauge',cat:'phys',name:'Momentum & impulse',formula:'p = mv &nbsp; J = F·Δt &nbsp; Δv = J/m',fields:[['m','Mass m (kg)'],['v','Velocity v (m/s) — for momentum'],['F','Net force F (N) — for impulse'],['t','Time Δt (s) — for impulse']],compute:function(v){ const m=+v.m,vv=+v.v,F=+v.F,t=+v.t; const gM=v.m.trim()!==''&&+v.m>0, gV=v.v.trim()!==''&&isFinite(+v.v), gF=v.F.trim()!==''&&isFinite(+v.F), gT=v.t.trim()!==''&&isFinite(+v.t)&&+v.t!==0; let out=''; if(gM&&gV) out+='<b>Momentum p = '+fmtN(m*vv,3)+' kg·m/s</b><br>'; if(gF&&gT) out+='<b>Impulse J = '+fmtN(F*t,3)+' N·s</b><br>'; if(gM&&gF&&gT) out+='<b>Δv from impulse = '+fmtN(F*t/m,3)+' m/s</b>'; return out||'Enter mass &amp; velocity for momentum, and/or force &amp; time for impulse.'; }},
+  eff:{ic:'fileText',cat:'phys',name:'Efficiency',formula:'η = W_out/W_in × 100%',fields:[['win','Energy input W_in (J)'],['wout','Useful output W_out (J)']],compute:function(v){ const win=+v.win,wout=+v.wout; if(!(win>0)||isNaN(wout)) return 'Enter energy input and output.'; return '<b>Efficiency η = '+fmtN(wout/win*100,2)+'%</b><br><b>Loss = '+fmtN(win-wout,2)+' J</b>'; }},
+  work:{ic:'zap',cat:'phys',name:'Work & power',formula:'W = F·s·cosθ &nbsp; P = W/t',fields:[['F','Force F (N)'],['s','Displacement s (m)'],['th','Angle θ (°) — optional'],['t','Time t (s) — for power']],compute:function(v){ if(v.F.trim()===''||v.s.trim()==='') return 'Enter force and displacement.'; if(!isFinite(+v.F)||!isFinite(+v.s)) return 'Enter valid numbers.'; const ct=v.th.trim()===''?1:Math.cos((+v.th)*Math.PI/180); const W=(+v.F)*(+v.s)*ct; let out='<b>Work W = '+fmtN(W,3)+' J</b>'; if(v.t.trim()!==''&&+v.t>0) out+='<br><b>Power P = '+fmtN(W/(+v.t),3)+' W</b>'; return out; }},
+  acid:{ic:'flask',cat:'chem',name:'pH & [H⁺]',formula:'pH = −log₁₀[H⁺] &nbsp; pOH = 14 − pH',fields:[['h','[H⁺] concentration (M)']],compute:function(v){ const h=+v.h; if(!(h>0)) return 'Enter a positive [H⁺] concentration.'; const pH=-Math.log10(h), pOH=14-pH; return '<b>pH = '+fmtN(pH,2)+'</b><br><b>pOH = '+fmtN(pOH,2)+'</b><br><b>[OH⁻] = '+fmtN(Math.pow(10,-pOH),4)+' M</b>'; }},
+  buffer:{ic:'droplet',cat:'chem',name:'Buffer pH',formula:'pH = pKₐ + log([salt]/[acid])',fields:[['pka','pKₐ of the weak acid'],['a','[Acid] concentration (M)'],['s','[Conjugate base] concentration (M)']],compute:function(v){ const pka=+v.pka,a=+v.a,s=+v.s; if(isNaN(pka)||!(a>0)||!(s>0)) return 'Enter pKₐ and positive concentrations.'; const pH=pka+Math.log10(s/a); return '<b>pH = '+fmtN(pH,2)+'</b><br><b>[H⁺] = '+fmtN(Math.pow(10,-pH),4)+' M</b>'; }},
+  mol:{ic:'calculator',cat:'chem',name:'Molarity',formula:'M = n/V (volume in litres)',fields:[['n','Moles of solute (mol)'],['V','Volume of solution (L)']],compute:function(v){ const n=+v.n,V=+v.V; if(!(n>0)||!(V>0)) return 'Enter moles and volume (positive).'; return '<b>Molarity M = '+fmtN(n/V,4)+' mol/L</b>'; }},
+  molality:{ic:'flask',cat:'chem',name:'Molality',formula:'m = n/kg_solvent',fields:[['n','Moles of solute (mol)'],['kg','Solvent mass (kg)']],compute:function(v){ const n=+v.n,kg=+v.kg; if(!(n>0)||!(kg>0)) return 'Enter positive moles and solvent mass.'; return '<b>Molality m = '+fmtN(n/kg,4)+' mol/kg</b>'; }},
+  mole:{ic:'calculator',cat:'chem',name:'Moles',formula:'n = m/M &nbsp; count = n·Nₐ',fields:[['m','Mass (g)'],['M','Molar mass M (g/mol)']],compute:function(v){ const m=+v.m,M=+v.M; if(v.m.trim()===''||isNaN(m)) return 'Enter the mass in grams.'; if(!(M>0)) return 'Enter a positive molar mass M.'; return '<b>Moles n = '+fmtN(m/M,4)+' mol</b><br><b>Particles = '+fmtN(m/M*6.02214076e23,4)+'</b>'; }},
+  dil:{ic:'history',cat:'chem',name:'Dilution',formula:'M₁V₁ = M₂V₂',fields:[['m1','Initial concentration M₁ (M)'],['v1','Initial volume V₁ (L)'],['v2','Final volume V₂ (L)']],compute:function(v){ const m1=+v.m1,v1=+v.v1,v2=+v.v2; if(!(m1>0)||!(v1>0)||!(v2>0)) return 'Enter positive values.'; return '<b>Final concentration M₂ = '+fmtN(m1*v1/v2,4)+' M</b>'; }},
+  half:{ic:'target',cat:'chem',name:'Half-life',formula:'λ = ln2/t½ &nbsp; fraction = 2^(−t/t½)',fields:[['th','Half-life t½ (s or any time unit)'],['t','Elapsed time t (same unit)']],compute:function(v){ const th=+v.th,t=+v.t; if(!(th>0)||!(t>=0)) return 'Enter a positive half-life and an elapsed time.'; const lam=Math.LN2/th, rem=Math.pow(2,-t/th); return '<b>Decay constant λ = '+fmtN(lam,4)+' s⁻¹</b><br><b>Fraction remaining = '+fmtN(rem,4)+' ('+fmtN(rem*100,2)+'%)</b>'; }},
+  nern:{ic:'flask',cat:'chem',name:'Nernst equation',formula:'E = E⁰ − (RT/nF)·lnQ',fields:[['E0','Standard potential E⁰ (V)'],['n','Electrons transferred n'],['T','Temperature T (K) — optional (default 298)'],['q','Reaction quotient Q — optional (default 1)']],compute:function(v){ const E0=+v.E0,n=+v.n; if(!(n>0)) return 'Enter electron count n &gt; 0.'; const T=(v.T.trim()==='')?298:Math.max(0,+v.T); const Q=(v.q.trim()!==''&&+v.q>0)?+v.q:1; const E=E0+8.314*T/(n*96485)*Math.log(Q); return '<b>E_cell = '+fmtN(E,4)+' V</b>'+(v.T.trim()===''?' at 298 K':' at '+fmtN(T,2)+' K'); }},
+  yield:{ic:'target',cat:'chem',name:'Percent yield',formula:'% yield = actual/(theoretical) × 100',fields:[['a','Actual yield (g)'],['b','Theoretical yield (g)']],compute:function(v){ const a=+v.a,b=+v.b; if(v.a.trim()===''||v.b.trim()==='') return 'Enter the actual and theoretical yields.'; if(isNaN(a)||isNaN(b)||a<0||!(b>0)) return 'Theoretical yield must be positive.'; const pct=a/b*100; return '<b>Percent yield = '+fmtN(pct,2)+'%</b>'+(a>b?'<br><span style="color:var(--bad)">Close to or above theoretical — check your values.</span>':''); }},
+  ka:{ic:'flask',cat:'chem',name:'Kₐ from pH',formula:'Kₐ = [H⁺]²/(C − [H⁺]) &nbsp; approx Kₐ ≈ [H⁺]²/C',fields:[['c','Acid concentration C (M)'],['pH','pH of the solution']],compute:function(v){ const c=+v.c,pH=+v.pH; if(!(c>0)||isNaN(pH)) return 'Enter a positive concentration and the pH.'; if(pH<0||pH>14) return 'pH should be between 0 and 14.'; const h=Math.pow(10,-pH); const ka=h*h/c; return '<b>Kₐ = '+fmtN(ka,6)+'</b> (pKₐ = '+fmtN(-Math.log10(ka),2)+')'; }},
+  rms:{ic:'wind',cat:'chem',name:'RMS speed',formula:'v_rms = √(3RT/M)',fields:[['T','Temperature T (K)'],['M','Molar mass M (kg/mol)']],compute:function(v){ const T=+v.T,M=+v.M; if(!(T>0)||!(M>0)) return 'Enter a positive temperature (K) and molar mass (kg/mol).'; return '<b>v_rms = '+fmtN(Math.sqrt(3*8.314*T/M),2)+' m/s</b>'; }},
+  dg:{ic:'sparkles',cat:'chem',name:'Gibbs free energy',formula:'ΔG = ΔH − TΔS',fields:[['dh','ΔH (kJ/mol)'],['ds','ΔS (J/mol·K)'],['T','Temperature T (K)']],compute:function(v){ const dh=+v.dh,ds=+v.ds,T=+v.T; if(isNaN(dh)||isNaN(ds)||isNaN(T)) return 'Enter ΔH, ΔS and T.'; const dg=dh*1000-T*ds; return '<b>ΔG = '+fmtN(dg/1000,3)+' kJ/mol</b> — <b>'+(dg<=0?'spontaneous cell':'non-spontaneous')+'</b> at '+fmtN(T,1)+' K'; }},
+  quad:{ic:'fn',cat:'math',name:'Quadratic',formula:'x = (−b ± √(b² − 4ac)) / 2a',fields:[['a','a (x² coefficient)'],['b','b (x coefficient)'],['c','c (constant)']],compute:function(v){ const a=+v.a,b=+v.b,c=+v.c; if(isNaN(a)||isNaN(b)||isNaN(c)) return 'Enter a, b and c.'; if(a===0) return b===0?'Not a quadratic equation.':'Linear root: x = '+fmtN(-c/b,4); const D=b*b-4*a*c; let roots; if(D>0) roots='x₁ = '+fmtN((-b+Math.sqrt(D))/(2*a),4)+', x₂ = '+fmtN((-b-Math.sqrt(D))/(2*a),4); else if(D===0) roots='x = '+fmtN(-b/(2*a),4); else roots='x = '+fmtN(-b/(2*a),4)+' ± '+fmtN(Math.sqrt(-D)/(2*a),4)+'i'; return '<b>Discriminant D = '+fmtN(D,2)+'</b> ('+(D>0?'two real roots':D===0?'one repeated root':'complex roots')+')<br><b>'+roots+'</b>'; }},
+  err:{ic:'droplet',cat:'math',name:'% Error',formula:'% error = |true − measured| / |true| × 100',fields:[['tv','True value'],['mv','Measured value']],compute:function(v){ const t=+v.tv,m=+v.mv; if(isNaN(t)||isNaN(m)||t===0) return 'Enter both values — the true value cannot be 0.'; const ae=Math.abs(t-m); return '<b>Absolute error = '+fmtN(ae,4)+'</b><br><b>Percentage error = '+fmtN(ae/Math.abs(t)*100,2)+'%</b>'; }},
+  ap:{ic:'layers',cat:'math',name:'Arithmetic series',formula:'aₙ = a + (n−1)d &nbsp; Sₙ = n(2a+(n−1)d)/2',fields:[['a','First term a'],['d','Common difference d'],['n','Number of terms n']],compute:function(v){ const a=+v.a,d=+v.d,n=+v.n; if(isNaN(a)||isNaN(d)||!(n>0)||Math.round(n)!==n) return 'Enter a, d and an integer n ≥ 1.'; return '<b>a_n = '+fmtN(a+(n-1)*d,4)+'</b><br><b>S_n = '+fmtN(n*(2*a+(n-1)*d)/2,4)+'</b>'; }},
+  gp:{ic:'layers',cat:'math',name:'Geometric series',formula:'aₙ = arⁿ⁻¹ &nbsp; Sₙ = a(1−rⁿ)/(1−r)',fields:[['a','First term a'],['r','Common ratio r'],['n','Number of terms n']],compute:function(v){ const a=+v.a,r=+v.r,n=+v.n; if(isNaN(a)||isNaN(r)||!(n>0)||Math.round(n)!==n) return 'Enter a, r and an integer n ≥ 1.'; const an=a*Math.pow(r,n-1); const sn=(Math.abs(r)===1)?a*n:(a*(1-Math.pow(r,n))/(1-r)); let out='<b>a_n = '+fmtN(an,5)+'</b><br><b>S_n = '+fmtN(sn,5)+'</b>'; if(Math.abs(r)<1) out+='<br><b>S_∞ = '+fmtN(a/(1-r),5)+'</b>'; return out; }},
+  perm:{ic:'fn',cat:'math',name:'Permutations',formula:'P(n,r) = n!/(n−r)!',fields:[['n','n (total items)'],['r','r (chosen)']],compute:function(v){ const n=+v.n,r=+v.r; if(!(n>=0)||!(r>=0)||Math.round(n)!==n||Math.round(r)!==r||r>n) return 'Enter integers with 0 ≤ r ≤ n.'; let p=1; for(let k=0;k<r;k++) p*=(n-k); return '<b>P('+fmtN(n,0)+', '+fmtN(r,0)+') = '+fmtN(p,0)+'</b>'; }},
+  comb:{ic:'fn',cat:'math',name:'Combinations',formula:'C(n,r) = n!/(r!(n−r)!)',fields:[['n','n (total items)'],['r','r (chosen)']],compute:function(v){ let n=+v.n,r=+v.r; if(!(n>=0)||!(r>=0)||Math.round(n)!==n||Math.round(r)!==r||r>n) return 'Enter integers with 0 ≤ r ≤ n.'; if(r>n-r) r=n-r; let c=1; for(let k=0;k<r;k++) c=c*(n-k)/(k+1); return '<b>C('+fmtN(n,0)+', '+fmtN(r,0)+') = '+fmtN(Math.round(c),0)+'</b>'; }},
+  dist:{ic:'gauge',cat:'math',name:'Distance & midpoint',formula:'d = √((x₂−x₁)²+(y₂−y₁)²)',fields:[['x1','x₁'],['y1','y₁'],['x2','x₂'],['y2','y₂']],compute:function(v){ if(v.x1.trim()===''||v.y1.trim()===''||v.x2.trim()===''||v.y2.trim()==='') return 'Enter all four coordinates.'; const x1=+v.x1,y1=+v.y1,x2=+v.x2,y2=+v.y2; if([x1,y1,x2,y2].some(x=>isNaN(x))) return 'Enter numeric coordinates.'; const dx=x2-x1,dy=y2-y1; return '<b>Distance = '+fmtN(Math.sqrt(dx*dx+dy*dy),3)+'</b><br><b>Midpoint = ('+fmtN((x1+x2)/2,3)+', '+fmtN((y1+y2)/2,3)+')</b>'; }},
+  circle:{ic:'layers',cat:'math',name:'Circle',formula:'A = πr² &nbsp; C = 2πr',fields:[['r','Radius r (m)']],compute:function(v){ const r=+v.r; if(!(r>0)) return 'Enter a positive radius.'; return '<b>Area A = '+fmtN(Math.PI*r*r,4)+' m²</b><br><b>Circumference C = '+fmtN(2*Math.PI*r,4)+' m</b>'; }},
+  sphere:{ic:'star',cat:'math',name:'Sphere',formula:'V = 4/3πr³ &nbsp; A = 4πr²',fields:[['r','Radius r (m)']],compute:function(v){ const r=+v.r; if(!(r>0)) return 'Enter a positive radius.'; return '<b>Volume V = '+fmtN(4/3*Math.PI*r*r*r,4)+' m³</b><br><b>Surface area A = '+fmtN(4*Math.PI*r*r,4)+' m²</b>'; }},
+  cyl:{ic:'layers',cat:'math',name:'Cylinder',formula:'V = πr²h &nbsp; A = 2πr(r+h)',fields:[['r','Radius r (m)'],['h','Height h (m)']],compute:function(v){ const r=+v.r,h=+v.h; if(!(r>0)||!(h>0)) return 'Enter a positive radius and height.'; return '<b>Volume V = '+fmtN(Math.PI*r*r*h,4)+' m³</b><br><b>Surface area A = '+fmtN(2*Math.PI*r*(r+h),4)+' m²</b>'; }},
+  degcon:{ic:'settings',cat:'math',name:'Degrees → trig',formula:'rad = θ·π/180 &nbsp; sin(θ), cos(θ), tan(θ)',fields:[['d','Angle θ (°)']],compute:function(v){ const d=+v.d; if(v.d.trim()===''||isNaN(d)) return 'Enter an angle in degrees.'; const rad=d*Math.PI/180; return '<b>Radians = '+fmtN(rad,5)+'</b><br><b>sin = '+fmtN(Math.sin(rad),5)+'</b><br><b>cos = '+fmtN(Math.cos(rad),5)+'</b><br><b>tan = '+fmtN(Math.tan(rad),5)+'</b>'; }},
+  sumsq:{ic:'gauge',cat:'math',name:'Sum of powers',formula:'Σk = n(n+1)/2 &nbsp; Σk² = n(n+1)(2n+1)/6',fields:[['n','n (positive integer)']],compute:function(v){ const n=+v.n; if(!(n>=1)||Math.round(n)!==n) return 'Enter a positive integer n.'; const s=n*(n+1)/2; return '<b>Σk = '+fmtN(s,0)+'</b><br><b>Σk² = '+fmtN(n*(n+1)*(2*n+1)/6,0)+'</b><br><b>Σk³ = '+fmtN(s*s,0)+'</b>'; }},
+  right:{ic:'fn',cat:'math',name:'Right triangle',formula:'c² = a² + b² &nbsp; sin A = a/c',fields:[['a','Side a'],['b','Side b'],['c','Hypotenuse c']],compute:function(v){ const gA=v.a.trim()!==''&&+v.a>0, gB=v.b.trim()!==''&&+v.b>0, gC=v.c.trim()!==''&&+v.c>0; if((gA?1:0)+(gB?1:0)+(gC?1:0)<2) return 'Enter the lengths of any two sides (positive).'; let A=gA?+v.a:null, B=gB?+v.b:null, C=gC?+v.c:null; if(A===null) A=Math.sqrt(C*C-B*B); else if(B===null) B=Math.sqrt(C*C-A*A); else if(C===null) C=Math.sqrt(A*A+B*B); if(!(A>0)||!(B>0)||!(C>0)) return 'Those sides cannot form a right triangle — check your values.'; return '<b>Hypotenuse = '+fmtN(Math.max(A,B,C),4)+'</b><br><b>Angle opposite a = '+fmtN(Math.asin(A/Math.max(A,B,C))*180/Math.PI,2)+'°</b><br><b>Angle opposite b = '+fmtN(90-Math.asin(A/Math.max(A,B,C))*180/Math.PI,2)+'°</b>'; }}
 };
 const NK_ORDER=[['C','clear'],['⌫','back'],['±','neg'],['÷','op'],['7','n'],['8','n'],['9','n'],['×','op'],['4','n'],['5','n'],['6','n'],['−','op'],['1','n'],['2','n'],['3','n'],['+','op'],['0','n'],['.','dot'],['=','eq']];
 const SK_ORDER=[
-  ['C','clear'],['⌫','back'],['(','lp'],[')','rp'],['%','op'],
-  ['x²','sq'],['x³','cube'],['xʸ','pow'],['√','sqrt'],['∛','cbrt'],
-  ['7','n'],['8','n'],['9','n'],['÷','op'],['1/x','inv'],
-  ['4','n'],['5','n'],['6','n'],['×','op'],['ln','ln'],
-  ['1','n'],['2','n'],['3','n'],['−','op'],['log','log'],
-  ['0','n'],['.','dot'],['±','neg'],['+','op'],['=','eq'],
-  ['sin','sin'],['cos','cos'],['tan','tan'],['π','pi'],['!','fact'],
-  ['asin','asin'],['acos','acos'],['atan','atan'],['|x|','abs'],['e','e']
+  ['C','clear'],['⌫','back'],['(','lp'],[')','rp'],['%','op'],['!','fact'],
+  ['sin','sin','sec','sec'],['cos','cos','csc','csc'],['tan','tan','cot','cot'],
+  ['asin','asin','asec','asec'],['acos','acos','acsc','acsc'],['atan','atan','acot','acot'],
+  ['x²','sq'],['x³','cube'],['xʸ','pow'],['√','sqrt'],['∛','cbrt'],['1/x','inv'],
+  ['ln','ln'],['log','log'],['log2','log2'],['eˣ','exp'],['10ˣ','exp10'],['|x|','abs'],
+  ['7','n'],['8','n'],['9','n'],['÷','op'],['π','pi','φ','phi'],['e','e','γ','gamma'],
+  ['4','n'],['5','n'],['6','n'],['×','op'],['sinh','sinh','asinh','asinh'],['cosh','cosh','acosh','acosh'],
+  ['1','n'],['2','n'],['3','n'],['−','op'],['tanh','tanh','atanh','atanh'],['ANS','ans'],
+  ['0','n'],['.','dot'],['±','neg'],['+','op'],['=','eq']
 ];
 const SCI_CONSTS=[
-  ['π',''+Math.PI],['e (Euler)',''+Math.E],['g — gravity, m/s²','9.80665'],['c — light, m/s','299792458'],
-  ['h — Planck, J·s','6.62607015e-34'],['ħ — reduced h, J·s','1.054571817e-34'],['G — gravitation, N·m²/kg²','6.67430e-11'],
-  ['R — gas constant, J/mol·K','8.314462618'],['Nₐ — Avogadro, /mol','6.02214076e23'],['k_B — Boltzmann, J/K','1.380649e-23'],
-  ['m_e — electron mass, kg','9.1093837015e-31'],['m_p — proton mass, kg','1.67262192369e-27'],['u — atomic mass, kg','1.66053906660e-27'],
-  ['ε₀ — permittivity, F/m','8.8541878128e-12'],['μ₀ — permeability, N/A²','1.25663706212e-6'],['atm — standard pressure, Pa','101325']
+  ['π',''+Math.PI],
+  ['e (Euler)',''+Math.E],
+  ['φ (golden ratio)',''+(1+Math.sqrt(5))/2],
+  ['τ (turn 2π)',''+(2*Math.PI)],
+  ['γ (Euler–Mascheroni)','0.5772156649015329'],
+  ['g — gravity, m/s²','9.80665'],
+  ['c — speed of light, m/s','299792458'],
+  ['h — Planck, J·s','6.62607015e-34'],
+  ['ħ — reduced Planck, J·s','1.054571817e-34'],
+  ['G — gravitation, N·m²/kg²','6.67430e-11'],
+  ['R — gas constant, J/(mol·K)','8.314462618'],
+  ["R' — gas constant, L·atm/(mol·K)",'0.08205736608096'],
+  ['Nₐ — Avogadro, mol⁻¹','6.02214076e23'],
+  ['k_B — Boltzmann, J/K','1.380649e-23'],
+  ['e — elementary charge, C','1.602176634e-19'],
+  ['m_e — electron mass, kg','9.1093837015e-31'],
+  ['m_p — proton mass, kg','1.67262192369e-27'],
+  ['m_n — neutron mass, kg','1.67492749804e-27'],
+  ['u — atomic mass unit, kg','1.66053906660e-27'],
+  ['ε₀ — permittivity, F/m','8.8541878128e-12'],
+  ['μ₀ — permeability, N/A²','1.25663706212e-6'],
+  ['k_e — Coulomb constant, N·m²/C²','8.9875517923e9'],
+  ['σ — Stefan–Boltzmann, W/(m²·K⁴)','5.670374419e-8'],
+  ['a₀ — Bohr radius, m','5.29177210903e-11'],
+  ['F — Faraday constant, C/mol','96485.33212'],
+  ['R∞ — Rydberg, m⁻¹','10973731.568160'],
+  ['atm — atmosphere, Pa','101325'],
+  ['torr — mmHg, Pa','133.322368421'],
+  ['calorie, J','4.184'],
+  ['T₀ — 0 °C, K','273.15'],
+  ['V_m(STP) — molar volume, L','22.414'],
+  ['ly — light-year, m','9.46073047258e15'],
+  ['au — astronomical unit, m','149597870700']
 ];
 function openCalc(){
-  const keys=Object.keys(CALCS);
+  const catChips='<div class="calc-cats">'+CALC_CATS.map(function(c){ return '<button class="calc-cat-chip'+(c[0]==='all'?' active':'')+'" data-c="'+c[0]+'">'+c[1]+'</button>'; }).join('')+'</div>';
+  const constOpts='<option value="">Insert constant…</option>'+SCI_CONSTS.map(function(c){ return '<option value="'+c[1]+'">'+c[0]+'</option>'; }).join('');
   const w=openOverlay(
     '<div class="fv-modal-head"><h3>'+window.__I.calculator+'Calculators</h3><button class="fv-icon-btn" data-close>×</button></div>'+
     '<div class="calc-mode-tabs">'+
-      '<button class="calc-mode-tab active" data-view="formula">Formula calculators</button>'+
+      '<button class="calc-mode-tab active" data-view="formula">Formula</button>'+
       '<button class="calc-mode-tab" data-view="normal">Normal</button>'+
       '<button class="calc-mode-tab" data-view="sci">Scientific</button>'+
       '<button class="calc-mode-tab" data-view="graph">Graphing</button>'+
+      '<button class="calc-mode-tab" data-view="sciplot">Sci + Graph</button>'+
     '</div>'+
     '<div class="fv-modal-body">'+
       '<div class="calc-view active" data-view="formula">'+
-        '<div class="calc-tabs">'+keys.map(function(k,i){ return '<button class="calc-tab'+(i===0?' active':'')+'" data-k="'+k+'">'+window.__I[CALCS[k].ic]+CALCS[k].name+'</button>'; }).join('')+'</div>'+
+        catChips+
+        '<div class="calc-tabs" id="calcTabs"></div>'+
         '<div class="calc-grid" id="calcGrid"></div>'+
       '</div>'+
       '<div class="calc-view" data-view="normal">'+
@@ -802,30 +1005,99 @@ function openCalc(){
       '<div class="calc-view" data-view="sci">'+
         '<div class="cal-display"><div class="cal-expr" id="sciExpr">0</div><div class="cal-result" id="sciResult"></div></div>'+
         '<div class="cal-ctrl">'+
-          '<select id="sciConst" aria-label="Insert a constant"><option value="">Insert constant…</option>'+SCI_CONSTS.map(function(c){ return '<option value="'+c[1]+'">'+c[0]+'</option>'; }).join('')+'</select>'+
+          '<select id="sciConst" aria-label="Insert a constant">'+constOpts+'</select>'+
           '<button class="cal-ctrl-b" id="sciDeg" title="Toggle degrees / radians">DEG</button>'+
-          '<button class="cal-ctrl-b" id="sciAns" title="Insert the last answer">ANS</button>'+
+          '<button class="cal-ctrl-b" id="sci2nd" title="Toggle the 2nd function layer">2nd</button>'+
         '</div>'+
-        '<div class="cal-pad pad-5" id="sciPad">'+SK_ORDER.map(function(it){ return '<button class="cal-k" data-k="'+it[1]+'">'+it[0]+'</button>'; }).join('')+'</div>'+
+        '<div class="cal-pad pad-6" id="sciPad"></div>'+
       '</div>'+
       '<div class="calc-view" data-view="graph">'+
-        '<div class="graph-ctrl"><span class="graph-y">y</span><input id="graphExpr" value="x^2" spellcheck="false" autocomplete="off" aria-label="Graph of function y"><button class="graph-b" id="gZoomIn" title="Zoom in">+</button><button class="graph-b" id="gZoomOut" title="Zoom out">−</button><button class="graph-b" id="gReset" title="Reset view">Reset</button></div>'+
-        '<div class="graph-wrap"><canvas id="graphCanvas" height="400"></canvas></div>'+
-        '<div class="graph-hint">Scroll to zoom · drag to pan</div>'+
+        '<div class="g-toolbar"><span class="graph-y">y =</span><div class="g-list" id="gList"></div></div>'+
+        '<div class="g-range">'+
+          '<label>x</label><input id="gxmin" value="-10" aria-label="x minimum"><input id="gxmax" value="10" aria-label="x maximum">'+
+          '<label>y</label><input id="gymin" value="-6" aria-label="y minimum"><input id="gymax" value="6" aria-label="y maximum">'+
+          '<button class="graph-b tiny" id="gSet" title="Apply the range">Set</button>'+
+          '<button class="graph-b tiny" id="gZoomIn" title="Zoom in">+</button>'+
+          '<button class="graph-b tiny" id="gZoomOut" title="Zoom out">−</button>'+
+          '<button class="graph-b tiny" id="gReset" title="Reset the view">Reset</button>'+
+        '</div>'+
+        '<div class="graph-wrap"><canvas id="graphCanvas"></canvas></div>'+
+        '<div class="graph-hint">drag to pan · scroll to zoom towards the cursor · shift+scroll pans x · alt+scroll pans y · pinch zooms</div>'+
+      '</div>'+
+      '<div class="calc-view" data-view="sciplot">'+
+        '<div class="calc-split">'+
+          '<div class="sciplot-left">'+
+            '<div class="cal-display"><div class="cal-expr" id="spExpr">0</div><div class="cal-result" id="spResult"></div></div>'+
+            '<div class="cal-ctrl">'+
+              '<select id="spConst" aria-label="Insert a constant">'+constOpts+'</select>'+
+              '<button class="cal-ctrl-b" id="spDeg" title="Toggle degrees / radians">DEG</button>'+
+              '<button class="cal-ctrl-b" id="sp2nd" title="Toggle the 2nd function layer">2nd</button>'+
+            '</div>'+
+            '<div class="cal-pad pad-6" id="spPad"></div>'+
+            '<button class="fv-btn primary sciplot-plot" id="spPlot">Plot graph</button>'+
+          '</div>'+
+          '<div class="sciplot-right">'+
+            '<div class="g-toolbar"><span class="graph-y">y =</span><div class="g-list" id="spList"></div></div>'+
+            '<div class="graph-wrap"><canvas id="spCanvas"></canvas></div>'+
+            '<div class="graph-hint">drag to pan · scroll to zoom · pinch zooms</div>'+
+          '</div>'+
+        '</div>'+
       '</div>'+
     '</div>','modal calc-modal');
-  let cur=keys[0];
+  const panel=w.querySelector('.fv-ov-panel');
+  const modeTabs=$$('.calc-mode-tab',w);
+  let curCat='all';
+  let cur=Object.keys(CALCS)[0];
+  /* ---- formula calculators ---- */
+  function renderCats(){
+    const cc=w.querySelector('#calcCats');
+    cc.innerHTML=CALC_CATS.map(function(c){ return '<button class="calc-cat-chip'+(curCat===c[0]?' active':'')+'" data-c="'+c[0]+'">'+c[1]+'</button>'; }).join('');
+    $$('.calc-cat-chip',cc).forEach(function(b){ b.onclick=function(){ curCat=b.dataset.c; renderCats(); renderTabs(); render(); }; });
+  }
+  function renderTabs(){
+    const filterKeys=Object.keys(CALCS).filter(function(k){ return curCat==='all'||CALCS[k].cat===curCat; });
+    if(filterKeys.indexOf(cur)===-1) cur=filterKeys[0];
+    const tabs=w.querySelector('#calcTabs');
+    tabs.innerHTML='';
+    let prevCat=null;
+    filterKeys.forEach(function(k){
+      const cat=CALCS[k].cat;
+      if(cat!==prevCat){
+        const h=document.createElement('div'); h.className='calc-tab-head'; h.textContent=CALC_CAT_NAMES[cat]||cat; tabs.appendChild(h);
+        prevCat=cat;
+      }
+      const b=document.createElement('button'); b.className='calc-tab'+(k===cur?' active':''); b.dataset.k=k;
+      b.innerHTML=window.__I[CALCS[k].ic]+CALCS[k].name;
+      b.onclick=function(){ cur=k; $$('.calc-tab',tabs).forEach(function(x){ x.classList.remove('active'); }); b.classList.add('active'); render(); };
+      tabs.appendChild(b);
+    });
+  }
   function render(){
     const c=CALCS[cur]; const grid=w.querySelector('#calcGrid');
-    grid.innerHTML='<div class="calc-fml">'+c.formula+'</div>'+c.fields.map(f=>'<div class="calc-field"><label>'+f[1]+'</label><input data-f="'+f[0]+'" type="number" step="any" placeholder="—"></div>').join('')+'<div class="calc-out" id="calcOut"></div>';
-    $$('input',grid).forEach(inp=>inp.oninput=function(){ const v={}; $$('input',grid).forEach(i=>v[i.dataset.f]=i.value); w.querySelector('#calcOut').innerHTML=c.compute(v); });
+    grid.innerHTML='<div class="calc-fml">'+c.formula+'</div>'+c.fields.map(function(f){ return '<div class="calc-field"><label>'+f[1]+'</label><input data-f="'+f[0]+'" type="number" step="any" placeholder="—"></div>'; }).join('')+'<div class="calc-out" id="calcOut"></div>';
+    $$('input',grid).forEach(function(inp){
+      inp.oninput=function(){
+        const v={}; let any=false;
+        $$('input',grid).forEach(function(i){ v[i.dataset.f]=i.value; if(i.value.trim()!=='') any=true; });
+        w.querySelector('#calcOut').innerHTML=any?c.compute(v):'';
+      };
+    });
   }
-  $$('.calc-tab',w).forEach(b=>b.onclick=function(){ $$('.calc-tab',w).forEach(x=>x.classList.remove('active')); b.classList.add('active'); cur=b.dataset.k; render(); });
-  render();
-  let degFlag=false, shared={ans:0};
-  function makeCalc(){
+  renderCats(); renderTabs(); render();
+  /* ---- shared calculator state ---- */
+  let degFlag=false, page2=false, shared={ans:0};
+  function makeCalc(groups){
     let buf='', fresh=true;
-    function evalEx(expr){ return CalcEngine.eval(expr,{deg:degFlag, vars:{ans:shared.ans}}); }
+    function refresh(){
+      groups.forEach(function(g){
+        const disp=g[0], res=g[1];
+        disp.textContent=buf||'0';
+        if(res){
+          if(!buf.trim()) res.textContent='';
+          else{ const r=CalcEngine.eval(buf,{deg:degFlag, vars:{ans:shared.ans}}); res.textContent=r.ok?('= '+fmtN(r.value,8)):('= '+r.error); }
+        }
+      });
+    }
     function trailingNumber(){
       let i=buf.length-1; while(i>=0&&/[0-9.]/.test(buf[i])) i--;
       if(i===buf.length-1) return null;
@@ -833,157 +1105,298 @@ function openCalc(){
       if(i>=0&&buf[i]==='-'&&(i===0||'()+-*/%^'.indexOf(buf[i-1])!==-1)) neg=i;
       return {start:start, neg:neg, end:buf.length};
     }
-    function refresh(disp,res){
-      if(!disp) return;
-      disp.textContent=buf||'0';
-      if(res){
-        if(!buf.trim()) res.textContent='';
-        else{ const r=evalEx(buf); res.textContent = r.ok ? ('= '+fmtN(r.value,8)) : ('= '+r.error); }
-      }
-    }
-    function input(disp,res,label,key){
+    function input(key,label){
       const l=buf.charAt(buf.length-1);
       if(key==='n'){
         if(buf==='0'&&/[0-9]/.test(label)) buf=label;
         else if(fresh&&/[0-9]/.test(label)){ buf=label; }
         else buf+=label;
-        fresh=false; refresh(disp,res); return;
+        fresh=false; refresh(); return;
       }
       if(key==='dot'){
         const tn=trailingNumber();
-        if(tn&&buf.slice(tn.start,tn.end).indexOf('.')!==-1){ refresh(disp,res); return; }
-        buf+='.'; fresh=false; refresh(disp,res); return;
+        if(tn&&buf.slice(tn.start,tn.end).indexOf('.')!==-1){ refresh(); return; }
+        buf+='.'; fresh=false; refresh(); return;
       }
       if(key==='op'||key==='lp'||key==='rp'){
-        if(key==='op'&&!buf.trim()){ refresh(disp,res); return; }
+        if(key==='op'&&!buf.trim()){ refresh(); return; }
         if(key==='op'&&l&&'+-*/%^×÷−'.indexOf(l)!==-1) buf=buf.slice(0,-1);
-        buf+=label; fresh=false; refresh(disp,res); return;
+        buf+=label; fresh=false; refresh(); return;
       }
-      if(key==='clear'){ buf=''; fresh=true; refresh(disp,res); return; }
-      if(key==='back'){ buf=buf.slice(0,-1); refresh(disp,res); return; }
+      if(key==='clear'){ buf=''; fresh=true; refresh(); return; }
+      if(key==='back'){ buf=buf.slice(0,-1); refresh(); return; }
       if(key==='neg'){
         const tn=trailingNumber();
         if(!tn){ buf+='-'; }
         else if(tn.neg>=0){ buf=buf.slice(0,tn.neg)+buf.slice(tn.neg+1); }
         else{ buf=buf.slice(0,tn.start)+'-'+buf.slice(tn.start); }
-        fresh=false; refresh(disp,res); return;
+        fresh=false; refresh(); return;
       }
-      if(key==='eq'){ const r=evalEx(buf); if(r.ok){ shared.ans=r.value; buf=fmtN(r.value,10); fresh=true; } refresh(disp,res); return; }
-      if(key==='ans'){ buf+=fmtN(shared.ans,8); fresh=false; refresh(disp,res); return; }
-      if(key==='fact'){ buf+='!'; fresh=false; refresh(disp,res); return; }
-      if(key==='inv'){ buf+='^(-1)'; fresh=false; refresh(disp,res); return; }
-      if(key==='sq'){ buf+='^2'; fresh=false; refresh(disp,res); return; }
-      if(key==='cube'){ buf+='^3'; fresh=false; refresh(disp,res); return; }
-      if(key==='pow'){ buf+='^'; fresh=false; refresh(disp,res); return; }
-      if(key==='pi'){ buf+='π'; fresh=false; refresh(disp,res); return; }
-      if(key==='e'){ buf+='e'; fresh=false; refresh(disp,res); return; }
-      if(key==='sqrt'||key==='cbrt'||key==='ln'||key==='log'||key==='sin'||key==='cos'||key==='tan'||key==='asin'||key==='acos'||key==='atan'||key==='abs'){
-        buf+=(key==='sqrt'?'√(':key==='cbrt'?'cbrt(':key+'('); fresh=false; refresh(disp,res); return;
+      if(key==='eq'){ const r=CalcEngine.eval(buf,{deg:degFlag, vars:{ans:shared.ans}}); if(r.ok){ shared.ans=r.value; buf=fmtN(r.value,10); fresh=true; } refresh(); return; }
+      if(key==='ans'){ buf+=fmtN(shared.ans,8); fresh=false; refresh(); return; }
+      if(key==='const'){ buf+=label; fresh=false; refresh(); return; }
+      if(key==='fact'){ buf+='!'; fresh=false; refresh(); return; }
+      if(key==='inv'){ buf+='^(-1)'; fresh=false; refresh(); return; }
+      if(key==='sq'){ buf+='^2'; fresh=false; refresh(); return; }
+      if(key==='cube'){ buf+='^3'; fresh=false; refresh(); return; }
+      if(key==='pow'){ buf+='^'; fresh=false; refresh(); return; }
+      if(key==='pi'){ buf+='π'; fresh=false; refresh(); return; }
+      if(key==='phi'){ buf+='phi'; fresh=false; refresh(); return; }
+      if(key==='gamma'){ buf+='gamma'; fresh=false; refresh(); return; }
+      if(key==='e'){ buf+='e'; fresh=false; refresh(); return; }
+      if(key==='sqrt'||key==='cbrt'||key==='ln'||key==='log'||key==='log2'||key==='exp'||key==='exp10'||key==='sin'||key==='cos'||key==='tan'||key==='asin'||key==='acos'||key==='atan'||key==='sec'||key==='csc'||key==='cot'||key==='asec'||key==='acsc'||key==='acot'||key==='sinh'||key==='cosh'||key==='tanh'||key==='asinh'||key==='acosh'||key==='atanh'||key==='abs'){
+        buf+=(key==='sqrt'?'√(':key==='cbrt'?'cbrt(':key+'('); fresh=false; refresh(); return;
       }
     }
-    return { input:input, refresh:refresh };
+    return { input:input, refresh:refresh, text:function(){ return buf; }, set:function(t){ buf=t; fresh=false; refresh(); } };
   }
-  const nC=makeCalc(), sC=makeCalc();
-  const nPad=w.querySelector('#normPad'), sPad=w.querySelector('#sciPad');
-  $$('.cal-k',nPad).forEach(function(b){ b.onclick=function(){ nC.input(w.querySelector('#normExpr'), w.querySelector('#normResult'), b.textContent, b.dataset.k); }; });
-  $$('.cal-k',sPad).forEach(function(b){ b.onclick=function(){ sC.input(w.querySelector('#sciExpr'), w.querySelector('#sciResult'), b.textContent, b.dataset.k); }; });
-  const sciConst=w.querySelector('#sciConst');
-  sciConst.onchange=function(){
-    if(sciConst.value!==''){ sC.input(w.querySelector('#sciExpr'), w.querySelector('#sciResult'), sciConst.value, 'const'); sciConst.value=''; }
-  };
-  w.querySelector('#sciDeg').onclick=function(){ degFlag=!degFlag; this.textContent=degFlag?'RAD':'DEG'; sC.refresh(w.querySelector('#sciExpr'), w.querySelector('#sciResult')); };
-  w.querySelector('#sciAns').onclick=function(){ sC.input(w.querySelector('#sciExpr'), w.querySelector('#sciResult'), 'ans', 'ans'); };
-  const gExpr=w.querySelector('#graphExpr'), gCv=w.querySelector('#graphCanvas');
-  const gvp={x0:-10,x1:10,y0:-6,y1:6};
-  let gTimer=null;
-  function niceStep(range){ const raw=range/7; const mag=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/mag; if(n<1.5) return mag; if(n<3.5) return 2*mag; if(n<7.5) return 5*mag; return 10*mag; }
-  function graphColor(){ try{ const cs=getComputedStyle(document.documentElement); const c=cs.getPropertyValue('--acc').trim(); return c||'#1D64D8'; }catch(e){ return '#1D64D8'; } }
-  function drawGraph(){
-    const dpr=window.devicePixelRatio||1;
-    const rect=gCv.getBoundingClientRect();
+  const nC=makeCalc([[w.querySelector('#normExpr'),w.querySelector('#normResult')]]);
+  const sC=makeCalc([[w.querySelector('#sciExpr'),w.querySelector('#sciResult')],[w.querySelector('#spExpr'),w.querySelector('#spResult')]]);
+  /* ---- keypads ---- */
+  const sciPad=w.querySelector('#sciPad'), spPad=w.querySelector('#spPad');
+  function padHTML(){
+    return SK_ORDER.map(function(it){
+      const k=page2?(it[3]||it[1]):it[1];
+      const l=page2?(it[2]||it[0]):it[0];
+      return '<button class="cal-k" data-k="'+k+'"'+(it[1]==='eq'?' data-sp="2"':'')+'>'+l+'</button>';
+    }).join('');
+  }
+  function bindPad(pad){
+    $$('.cal-k',pad).forEach(function(b){ b.onclick=function(){ sC.input(b.dataset.k,b.textContent); }; });
+  }
+  function renderSciPads(){
+    sciPad.innerHTML=padHTML(); bindPad(sciPad);
+    spPad.innerHTML=padHTML(); bindPad(spPad);
+  }
+  renderSciPads();
+  function bind2nd(id){
+    w.querySelector(id).onclick=function(){
+      page2=!page2;
+      w.querySelector('#sci2nd').classList.toggle('on',page2);
+      w.querySelector('#sp2nd').classList.toggle('on',page2);
+      renderSciPads();
+    };
+  }
+  bind2nd('#sci2nd'); bind2nd('#sp2nd');
+  function bindConstSel(id){
+    const sel=w.querySelector(id);
+    sel.onchange=function(){
+      if(sel.value!==''){ sC.input('const',sel.value); sel.value=''; }
+    };
+  }
+  bindConstSel('#sciConst'); bindConstSel('#spConst');
+  function bindDeg(id){
+    w.querySelector(id).onclick=function(){
+      degFlag=!degFlag;
+      w.querySelector('#sciDeg').textContent=degFlag?'RAD':'DEG';
+      w.querySelector('#spDeg').textContent=degFlag?'RAD':'DEG';
+      sC.refresh();
+    };
+  }
+  bindDeg('#sciDeg'); bindDeg('#spDeg');
+  $$('.cal-k',w.querySelector('#normPad')).forEach(function(b){ b.onclick=function(){ nC.input(b.dataset.k,b.textContent); }; });
+  /* ---- graphing ---- */
+  const PALETTE=['#2E7CF6','#FF375F','#2FBF71','#FF9F0A','#9B5CFF','#0E93AE','#FFD60A','#FF7AC6'];
+  const gCanvases=[w.querySelector('#graphCanvas'), w.querySelector('#spCanvas')];
+  const gList=w.querySelector('#gList'), spList=w.querySelector('#spList');
+  const gst={exps:[],x0:-10,x1:10,y0:-6,y1:6,next:0,_pan:null,_pinch:null};
+  function addGraphExpr(txt){
+    txt=(txt||'').trim();
+    if(!txt) return false;
+    if(gst.exps.some(function(e){ return e.e===txt; })) return false;
+    gst.exps.push({id:gst.next++, e:txt, c:gst.exps.length%PALETTE.length});
+    renderAllLists(); requestDraw(); return true;
+  }
+  function renderAllLists(){ [gList,spList].forEach(function(ul){ renderList(ul); }); }
+  function renderList(ul){
+    ul.innerHTML='';
+    gst.exps.forEach(function(exp){
+      const row=document.createElement('div'); row.className='g-row';
+      const dot=document.createElement('button'); dot.className='g-dot'; dot.style.background=PALETTE[exp.c%PALETTE.length]; dot.title='Cycle colour';
+      const inp=document.createElement('input'); inp.className='g-inp'; inp.value=exp.e; inp.spellcheck=false; inp.autocomplete='off'; inp.setAttribute('aria-label','Graph y = '+exp.e+', press Enter to draw');
+      const del=document.createElement('button'); del.className='g-x'; del.textContent='×'; del.title='Remove function';
+      dot.onclick=function(){ exp.c=(exp.c+1)%PALETTE.length; renderAllLists(); requestDraw(); };
+      inp.addEventListener('input',function(){ exp.e=inp.value; scheduleDraw(); });
+      inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); drawAll(); } });
+      del.onclick=function(){ const i=gst.exps.indexOf(exp); if(i>-1) gst.exps.splice(i,1); renderAllLists(); requestDraw(); };
+      row.appendChild(dot); row.appendChild(inp); row.appendChild(del);
+      ul.appendChild(row);
+    });
+    if(!gst.exps.length){
+      const hint=document.createElement('div'); hint.className='g-empty'; hint.textContent='No functions — type one above and press Enter';
+      ul.appendChild(hint);
+    }
+  }
+  function niceStep(range){
+    const raw=range/7; if(raw<=0) return 1;
+    const mag=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/mag;
+    if(n<1.5) return mag; if(n<3.5) return 2*mag; if(n<7.5) return 5*mag; return 10*mag;
+  }
+  function trunc(s,n){ s=String(s); return s.length>n?s.slice(0,n-1)+'…':s; }
+  function drawGraph(cv){
+    const rect=cv.getBoundingClientRect();
     if(!rect.width||!rect.height) return;
-    gCv.width=Math.round(rect.width*dpr); gCv.height=Math.round(rect.height*dpr);
-    const c2=gCv.getContext('2d');
+    const dpr=window.devicePixelRatio||1;
+    cv.width=Math.round(rect.width*dpr); cv.height=Math.round(rect.height*dpr);
+    const c2=cv.getContext('2d');
     c2.setTransform(dpr,0,0,dpr,0,0);
-    const W=rect.width, H=rect.height;
+    const W=rect.width,H=rect.height;
     const css=getComputedStyle(document.documentElement);
     c2.fillStyle=css.getPropertyValue('--input-bg').trim()||'rgba(15,22,40,0.6)';
     c2.fillRect(0,0,W,H);
-    const X=x=>W*(x-gvp.x0)/(gvp.x1-gvp.x0);
-    const Y=y=>H-(y-gvp.y0)/(gvp.y1-gvp.y0);
-    const sx=niceStep(gvp.x1-gvp.x0), sy=niceStep(gvp.y1-gvp.y0);
+    const X=x=>W*(x-gst.x0)/(gst.x1-gst.x0);
+    const Y=y=>H-(y-gst.y0)/(gst.y1-gst.y0);
+    const sx=niceStep(gst.x1-gst.x0), sy=niceStep(gst.y1-gst.y0);
     c2.lineWidth=1; c2.strokeStyle=css.getPropertyValue('--soft-border').trim()||'rgba(255,255,255,0.07)';
-    c2.font='11px ui-monospace,Consolas,monospace'; c2.fillStyle=css.getPropertyValue('--text-low').trim()||'#8a93a6';
+    c2.font='11px ui-monospace,Consolas,monospace';
+    c2.fillStyle=css.getPropertyValue('--text-low').trim()||'#8a93a6';
     c2.beginPath();
-    for(let gx=Math.ceil(gvp.x0/sx)*sx; gx<=gvp.x1; gx+=sx){ c2.moveTo(X(gx),0); c2.lineTo(X(gx),H); }
-    for(let gy=Math.ceil(gvp.y0/sy)*sy; gy<=gvp.y1; gy+=sy){ c2.moveTo(0,Y(gy)); c2.lineTo(W,Y(gy)); }
+    for(let gx=Math.ceil(gst.x0/sx)*sx; gx<=gst.x1; gx+=sx){ c2.moveTo(X(gx),0); c2.lineTo(X(gx),H); }
+    for(let gy=Math.ceil(gst.y0/sy)*sy; gy<=gst.y1; gy+=sy){ c2.moveTo(0,Y(gy)); c2.lineTo(W,Y(gy)); }
     c2.stroke();
     c2.strokeStyle=css.getPropertyValue('--text-mid').trim()||'rgba(255,255,255,0.35)'; c2.lineWidth=1.2;
     c2.beginPath();
-    if(gvp.x0<=0&&gvp.x1>=0){ c2.moveTo(X(0),0); c2.lineTo(X(0),H); }
-    if(gvp.y0<=0&&gvp.y1>=0){ c2.moveTo(0,Y(0)); c2.lineTo(W,Y(0)); }
+    if(gst.x0<=0&&gst.x1>=0){ c2.moveTo(X(0),0); c2.lineTo(X(0),H); }
+    if(gst.y0<=0&&gst.y1>=0){ c2.moveTo(0,Y(0)); c2.lineTo(W,Y(0)); }
     c2.stroke();
     c2.textAlign='left';
-    for(let gx=Math.ceil(gvp.x0/sx)*sx; gx<=gvp.x1; gx+=sx){ if(gx===0) continue; c2.fillText(fmtN(gx,2), X(gx)+4, Y(0)+14); }
-    for(let gy=Math.ceil(gvp.y0/sy)*sy; gy<=gvp.y1; gy+=sy){ if(gy===0) continue; c2.fillText(fmtN(gy,2), X(0)+5, Y(gy)-4); }
-    const expr=gExpr.value.trim();
-    if(!expr) return;
-    const first=CalcEngine.eval(expr,{vars:{x:gvp.x0},deg:false});
-    if(!first.ok){
-      c2.fillStyle=graphColor(); c2.textAlign='center'; c2.font='600 13px inherit';
-      c2.fillText('y = '+expr, 14, 22);
+    for(let gx=Math.ceil(gst.x0/sx)*sx; gx<=gst.x1; gx+=sx){ if(gx===0){continue;} c2.fillText(fmtN(gx,2), X(gx)+4, Y(0)+14); }
+    for(let gy=Math.ceil(gst.y0/sy)*sy; gy<=gst.y1; gy+=sy){ if(gy===0){continue;} c2.fillText(fmtN(gy,2), X(0)+5, Y(gy)-4); }
+    if(!gst.exps.length){
+      c2.fillStyle=css.getPropertyValue('--text-low').trim()||'#8a93a6';
       c2.textAlign='center';
-      c2.fillText(first.error, W/2, 30);
+      c2.fillText('Type a function above and press Enter', W/2, H/2);
       return;
     }
-    c2.strokeStyle=graphColor(); c2.lineWidth=2.4; c2.lineJoin='round'; c2.lineCap='round';
-    const N=Math.min(1200, Math.max(300, Math.round(W)));
-    let drawing=false, path=null, prevY=null;
-    c2.beginPath();
-    for(let i=0;i<=N;i++){
-      const x=gvp.x0+(gvp.x1-gvp.x0)*i/N;
-      const r=CalcEngine.eval(expr,{vars:{x:x},deg:false});
-      let y=r.ok?r.value:NaN;
-      if(!isFinite(y)||Math.abs(y)>(gvp.y1-gvp.y0)*8){ drawing=false; prevY=null; continue; }
-      if(drawing&&prevY!==null&&Math.abs(y-prevY)>(gvp.y1-gvp.y0)*6){ drawing=false; }
-      const px=X(x), py=Y(y);
-      if(!drawing){ c2.moveTo(px,py); drawing=true; }
-      else c2.lineTo(px,py);
-      prevY=y;
+    c2.lineJoin='round'; c2.lineCap='round';
+    let firstErr=null;
+    gst.exps.forEach(function(exp){
+      const cc=CalcEngine.compile(exp.e,{deg:false});
+      if(!cc.ok){ if(!firstErr) firstErr=exp; return; }
+      const fn=CalcEngine.fn(cc);
+      c2.strokeStyle=PALETTE[exp.c%PALETTE.length]; c2.lineWidth=2.4;
+      c2.beginPath();
+      const N=Math.min(1600,Math.max(400,Math.round(W)));
+      let drawing=false, prevY=null;
+      for(let i=0;i<=N;i++){
+        const x=gst.x0+(gst.x1-gst.x0)*i/N;
+        const y=fn({x:x});
+        if(!isFinite(y)){ drawing=false; prevY=null; continue; }
+        if(drawing&&prevY!==null&&Math.abs(y-prevY)>(gst.y1-gst.y0)*8) drawing=false;
+        const px=X(x), py=Y(y);
+        if(!drawing){ c2.moveTo(px,py); drawing=true; }
+        else c2.lineTo(px,py);
+        prevY=y;
+      }
+      c2.stroke();
+    });
+    if(firstErr){
+      const cc=CalcEngine.compile(firstErr.e,{deg:false});
+      c2.fillStyle='rgba(255,93,108,0.9)'; c2.textAlign='center'; c2.font='600 13px inherit';
+      c2.fillText('y = '+trunc(firstErr.e,26)+' — '+(cc.error||'cannot plot'), W/2, 30);
     }
-    c2.stroke();
-    c2.fillStyle=graphColor(); c2.textAlign='left'; c2.beginPath();
-    c2.fillText('y = '+expr, 14, 22);
+    let ly=18;
+    gst.exps.forEach(function(exp){
+      c2.fillStyle=PALETTE[exp.c%PALETTE.length];
+      c2.fillRect(14,ly-9,11,11);
+      c2.fillStyle=css.getPropertyValue('--text-mid').trim()||'rgba(255,255,255,0.7)';
+      c2.textAlign='left';
+      c2.fillText('y = '+trunc(exp.e,30), 32, ly);
+      ly+=20;
+      if(ly>H-14){ ly=18; }
+    });
   }
-  function zoom(f){ const cx=(gvp.x0+gvp.x1)/2, cy=(gvp.y0+gvp.y1)/2; const hx=(gvp.x1-gvp.x0)/2*f, hy=(gvp.y1-gvp.y0)/2*f; gvp.x0=cx-hx; gvp.x1=cx+hx; gvp.y0=cy-hy; gvp.y1=cy+hy; drawGraph(); }
-  w.querySelector('#gZoomIn').onclick=function(){ zoom(0.8); };
-  w.querySelector('#gZoomOut').onclick=function(){ zoom(1.25); };
-  w.querySelector('#gReset').onclick=function(){ gvp.x0=-10; gvp.x1=10; gvp.y0=-6; gvp.y1=6; drawGraph(); };
-  function scheduleGraph(){ clearTimeout(gTimer); gTimer=setTimeout(drawGraph,160); }
-  gExpr.addEventListener('input',scheduleGraph);
-  gExpr.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); drawGraph(); } });
-  gCv.addEventListener('wheel',function(e){ e.preventDefault(); zoom(e.deltaY>0?1.25:0.8); }, {passive:false});
-  let pan=null;
-  gCv.addEventListener('pointerdown',function(e){ pan={x:e.clientX, y:e.clientY, vx0:gvp.x0, vx1:gvp.x1, vy0:gvp.y0, vy1:gvp.y1}; try{ gCv.setPointerCapture(e.pointerId); }catch(err){} });
-  gCv.addEventListener('pointermove',function(e){
-    if(!pan) return;
-    const rect=gCv.getBoundingClientRect();
-    const dx=e.clientX-pan.x, dy=e.clientY-pan.y;
-    const xpp=(pan.vx1-pan.vx0)/rect.width, ypp=(pan.vy1-pan.vy0)/rect.height;
-    gvp.x0=pan.vx0-dx*xpp; gvp.x1=pan.vx1-dx*xpp;
-    gvp.y0=pan.vy0+dy*ypp; gvp.y1=pan.vy1+dy*ypp;
-    drawGraph();
-  });
-  gCv.addEventListener('pointerup',function(){ pan=null; });
-  gCv.addEventListener('pointercancel',function(){ pan=null; });
-  function onRS(){ if(!w.isConnected){ window.removeEventListener('resize',onRS); return; } if(gCv.offsetParent) drawGraph(); }
-  window.addEventListener('resize',onRS);
-  $$('.calc-mode-tab',w).forEach(function(t){
-    t.onclick=function(){ $$('.calc-mode-tab',w).forEach(function(x){ x.classList.remove('active'); }); t.classList.add('active');
-      $$('.calc-view',w).forEach(function(vw){ vw.classList.toggle('active', vw.dataset.view===t.dataset.view); });
-      if(t.dataset.view==='graph'){ drawGraph(); }
+  function drawAll(){ gCanvases.forEach(function(cv){ if(cv.isConnected&&cv.getBoundingClientRect().width>0) drawGraph(cv); }); }
+  let drawTimer=null, drawRaf=null;
+  function requestDraw(){ if(drawRaf) return; drawRaf=requestAnimationFrame(function(){ drawRaf=null; drawAll(); }); }
+  function scheduleDraw(){ clearTimeout(drawTimer); drawTimer=setTimeout(requestDraw,160); }
+  function bindGraph(cv){
+    cv.addEventListener('wheel',function(e){
+      e.preventDefault();
+      const rect=cv.getBoundingClientRect();
+      const spanX=gst.x1-gst.x0, spanY=gst.y1-gst.y0;
+      if(e.shiftKey){
+        const dx=(e.deltaY||e.deltaX)*(spanX/480);
+        gst.x0+=dx; gst.x1+=dx;
+      } else if(e.altKey){
+        const dy=(e.deltaY||e.deltaX)*(spanY/480);
+        gst.y0-=dy; gst.y1-=dy;
+      } else {
+        const factor=e.ctrlKey?1.12:1.35;
+        const f=e.deltaY>0?factor:1/factor;
+        const mx=(e.clientX-rect.left)/rect.width;
+        const my=(e.clientY-rect.top)/rect.height;
+        const cx=gst.x0+spanX*mx;
+        const cy=gst.y0+spanY*(1-my);
+        gst.x0=cx-(cx-gst.x0)*f; gst.x1=cx+(gst.x1-cx)*f;
+        gst.y0=cy-(cy-gst.y0)*f; gst.y1=cy+(gst.y1-cy)*f;
+      }
+      requestDraw();
+    },{passive:false});
+    const ptrs={};
+    function clearPtr(){ if(Object.keys(ptrs).length===0){ gst._pan=null; gst._pinch=null; } }
+    cv.addEventListener('pointerdown',function(e){
+      e.preventDefault();
+      try{ cv.setPointerCapture(e.pointerId); }catch(err){}
+      ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
+      gst._pan={x:e.clientX,y:e.clientY,x0:gst.x0,x1:gst.x1,y0:gst.y0,y1:gst.y1};
+    });
+    cv.addEventListener('pointermove',function(e){
+      if(!ptrs.hasOwnProperty(e.pointerId)) return;
+      ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
+      const ids=Object.keys(ptrs);
+      const rect=cv.getBoundingClientRect();
+      if(ids.length===1){
+        if(gst._pinch){ gst._pinch=null; gst._pan={x:ptrs[ids[0]].x,y:ptrs[ids[0]].y,x0:gst.x0,x1:gst.x1,y0:gst.y0,y1:gst.y1}; }
+        if(!gst._pan) return;
+        const p=gst._pan;
+        const xpp=(p.x1-p.x0)/rect.width, ypp=(p.y1-p.y0)/rect.height;
+        const dx=e.clientX-p.x, dy=e.clientY-p.y;
+        gst.x0=p.x0-dx*xpp; gst.x1=p.x1-dx*xpp;
+        gst.y0=p.y0+dy*ypp; gst.y1=p.y1+dy*ypp;
+        requestDraw();
+      } else if(ids.length===2){
+        const a=ptrs[ids[0]], b=ptrs[ids[1]];
+        const d=Math.hypot(a.x-b.x,a.y-b.y);
+        if(!gst._pinch){ gst._pinch={d:Math.max(1,d)}; return; }
+        const f=d/Math.max(1,gst._pinch.d);
+        gst._pinch.d=Math.max(1,d);
+        const cx=gst.x0+(gst.x1-gst.x0)*((((a.x+b.x)/2-rect.left)/rect.width));
+        const cy=gst.y0+(gst.y1-gst.y0)*(1-((rect.bottom-(a.y+b.y)/2)/rect.height));
+        gst.x0=cx-(cx-gst.x0)/f; gst.x1=cx+(gst.x1-cx)/f;
+        gst.y0=cy-(cy-gst.y0)/f; gst.y1=cy+(gst.y1-cy)/f;
+        gst._pan=null;
+        requestDraw();
+      }
+    });
+    function endPtr(e){ delete ptrs[e.pointerId]; clearPtr(); }
+    cv.addEventListener('pointerup',endPtr);
+    cv.addEventListener('pointercancel',endPtr);
+    cv.addEventListener('pointerleave',function(e){ if(e.pointerType!=='touch'){ delete ptrs[e.pointerId]; clearPtr(); } });
+  }
+  gCanvases.forEach(bindGraph);
+  w.querySelector('#gZoomIn').onclick=function(){ const f=0.8, cx=(gst.x0+gst.x1)/2, cy=(gst.y0+gst.y1)/2; gst.x0=cx-(cx-gst.x0)*f; gst.x1=cx+(gst.x1-cx)*f; gst.y0=cy-(cy-gst.y0)*f; gst.y1=cy+(gst.y1-cy)*f; requestDraw(); };
+  w.querySelector('#gZoomOut').onclick=function(){ const f=1.25, cx=(gst.x0+gst.x1)/2, cy=(gst.y0+gst.y1)/2; gst.x0=cx-(cx-gst.x0)*f; gst.x1=cx+(gst.x1-cx)*f; gst.y0=cy-(cy-gst.y0)*f; gst.y1=cy+(gst.y1-cy)*f; requestDraw(); };
+  w.querySelector('#gReset').onclick=function(){ gst.x0=-10; gst.x1=10; gst.y0=-6; gst.y1=6; w.querySelector('#gxmin').value='-10'; w.querySelector('#gxmax').value='10'; w.querySelector('#gymin').value='-6'; w.querySelector('#gymax').value='6'; requestDraw(); };
+  w.querySelector('#gSet').onclick=function(){
+    const a=+w.querySelector('#gxmin').value, b=+w.querySelector('#gxmax').value, c=+w.querySelector('#gymin').value, d=+w.querySelector('#gymax').value;
+    if(isFinite(a)&&isFinite(b)&&isFinite(c)&&isFinite(d)&&a<b&&c<d){ gst.x0=a; gst.x1=b; gst.y0=c; gst.y1=d; requestDraw(); }
+  };
+  w.querySelector('#spPlot').onclick=function(){ if(addGraphExpr(sC.text())) toast('Plotted: '+trunc(sC.text(),24)); };
+  addGraphExpr('x^2'); addGraphExpr('sin(x)');
+  renderAllLists();
+  /* ---- mode tabs ---- */
+  modeTabs.forEach(function(t){
+    t.onclick=function(){
+      modeTabs.forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      $$('.calc-view',w).forEach(function(vw){ vw.classList.toggle('active',vw.dataset.view===t.dataset.view); });
+      panel.classList.toggle('sciplot-wide',t.dataset.view==='sciplot');
+      if(t.dataset.view==='graph'||t.dataset.view==='sciplot'){ requestDraw(); }
     };
   });
+  function onRS(){ if(!w.isConnected){ window.removeEventListener('resize',onRS); return; } requestDraw(); }
+  window.addEventListener('resize',onRS);
 }
 
 function exportData(){
