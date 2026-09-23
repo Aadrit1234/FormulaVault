@@ -292,7 +292,7 @@ let chatMsgs=activeThread?activeThread.msgs:[];
 let busy=false;
 function tutorSystem(){
   const subj=SUBJ[state.subject], cls=state.cls;
-  const browsing=(state.chapter&&state.chapter!=='all');
+  const browsing=!!state.chapter;
   const ctx=browsing
     ? 'The user is browsing the chapter "'+state.chapter+'" ('+subj+', Class '+cls+') in the vault — use it only as a hint about what they might ask.'
     : 'The user is browsing a '+subj+' formula vault for Class '+cls+'.';
@@ -390,7 +390,7 @@ function openTutor(){
   function add(role,text){ const d=document.createElement('div'); d.className='msg '+role; d.innerHTML = role==='user'?escHtml(text):fmtAI(text); chat.appendChild(d); scroll(); return d; }
   function setStatus(el,s){ let st=el.querySelector('.fv-stream-status'); if(!st){ st=document.createElement('div'); st.className='fv-stream-status'; el.appendChild(st);} st.innerHTML='◌ '+escHtml(s); }
   function renderSug(){
-    const ch = state.chapter!=='all'?state.chapter:null;
+    const ch = state.chapter||null;
     const sug = ch ? ['Explain '+ch+' simply','Top tricks for '+ch,'Common mistakes in '+ch,'3 practice problems on '+ch]
                    : ['Explain a concept from '+SUBJ[state.subject],'Quiz me on '+SUBJ[state.subject],'Help me with a homework problem','Make a 1-page revision plan'];
     const box=w.querySelector('#fvSuggest');
@@ -598,7 +598,7 @@ function openExplain(c){
   let queue;
   const favCards=favs.map(k=>CARDS.find(c=>key(c)===k)).filter(Boolean);
   if(favCards.length>=5) queue=shuffle(favCards.slice());
-  else{ queue=CARDS.filter(c=>c.subject===state.subject&&(state.chapter==='all'||c.chapter===state.chapter)); if(queue.length<5) queue=CARDS.slice(); queue=shuffle(queue.slice()); }
+  else{ queue=CARDS.filter(c=>c.subject===state.subject&&c.chapter===state.chapter); if(queue.length<5) queue=CARDS.slice(); queue=shuffle(queue.slice()); }
   queue=queue.slice(0,15);
   const ST={q:queue,i:0,got:0,again:0,handler:null};
   const w=openOverlay('<div class="study-top"><button class="fv-icon-btn" id="stEnd" title="End session">×</button><div class="study-progress"><i id="stProg" style="width:0%"></i></div><span class="ctx-pill" id="stCnt"></span></div>'+
@@ -1442,7 +1442,7 @@ function jumpTo(cls,subject,chapter,mode){
   const cb=document.querySelector('#classSeg [data-class="'+cls+'"]'); if(cb&&!cb.classList.contains('active')) cb.click();
   const sb=document.querySelector('#subjectSeg [data-subject="'+subject+'"]'); if(sb&&!sb.classList.contains('active')) sb.click();
   state.query='';
-  if(chapter&&chapter!=='all'){ setTimeout(function(){ const chip=document.querySelector('#chapterChips .chip[data-chapter="'+chapter.replace(/"/g,'&quot;')+'"]'); if(chip) chip.click(); },50); }
+  if(chapter){ setTimeout(function(){ const chip=document.querySelector('#chapterChips .chip[data-chapter="'+chapter.replace(/"/g,'&quot;')+'"]'); if(chip) chip.click(); },50); }
   else { FV.renderAll(); }
   window.scrollTo({top:0,behavior:'smooth'});
 }

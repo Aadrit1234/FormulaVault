@@ -238,7 +238,7 @@
   })();
 
   /* ---------- state ---------- */
-  const state = { cls: "11", subject: "physics", chapter: "all", query: "", mode: "formulas" };
+  const state = { cls: "11", subject: "physics", chapter: null, item: null, query: "", mode: "formulas" };
 
   const grid = document.getElementById('grid');
   const chapterChips = document.getElementById('chapterChips');
@@ -248,6 +248,66 @@
   const controlsWrap = document.getElementById('controlsWrap');
   const themeToggle = document.getElementById('themeToggle');
   let _searchTimer = null;
+
+  /* ---------- last-viewed persistence ---------- */
+  const LAST_KEY = 'fvault:lastView';
+  let _scrollPending = true;
+  function readLast(){ try{ const v=localStorage.getItem(LAST_KEY); return v?JSON.parse(v):null; }catch(e){ return null; } }
+  function lastKey(){ return state.mode+'|'+state.cls+'|'+state.subject; }
+  function writeLast(){
+    try{
+      const last=readLast()||{ chapters:{}, items:{} };
+      last.nav={ mode:state.mode, cls:state.cls, subject:state.subject };
+      const ck=lastKey();
+      if(state.chapter) last.chapters[ck]=state.chapter;
+      last.items[ck+'|'+(state.chapter||'')] = state.item || null;
+      localStorage.setItem(LAST_KEY, JSON.stringify(last));
+    }catch(e){}
+  }
+  function validChapter(cls, subject, mode, chapter){
+    const chapters=getChaptersFor(cls, subject, mode);
+    return chapters.indexOf(chapter)!==-1 ? chapter : (chapters[0]||null);
+  }
+  function restoreChapterFor(mode, cls, subject){
+    const last=readLast();
+    const ck=mode+'|'+cls+'|'+subject;
+    const want=last && last.chapters ? last.chapters[ck] : null;
+    state.chapter=validChapter(cls, subject, mode, want);
+    state.item = last && last.items ? (last.items[ck+'|'+(state.chapter||'')]||null) : null;
+  }
+  function syncSegments(){
+    document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('active', b.dataset.mode===state.mode));
+    document.querySelectorAll('#classSeg button').forEach(b=>b.classList.toggle('active', b.dataset.class===state.cls));
+    document.querySelectorAll('#subjectSeg button').forEach(b=>b.classList.toggle('active', b.dataset.subject===state.subject));
+  }
+  function restoreOpenItem(){
+    if(!state.item || state.mode==='formulas') return;
+    const els=state.mode==='derivations' ? document.querySelectorAll('#grid .deriv-card') : document.querySelectorAll('#grid .law-card');
+    els.forEach(function(el){ const t=el.querySelector('.deriv-title'); if(t && t.textContent.trim()===state.item) el.classList.add('open'); });
+  }
+  function scrollToItem(){
+    if(!_scrollPending) return;
+    _scrollPending=false;
+    if(!state.item || state.mode==='formulas') return;
+    setTimeout(function(){
+      const els=state.mode==='derivations' ? document.querySelectorAll('#grid .deriv-card') : document.querySelectorAll('#grid .law-card');
+      let target=null;
+      els.forEach(function(el){ const t=el.querySelector('.deriv-title'); if(t && t.textContent.trim()===state.item) target=el; });
+      if(!target) return;
+      if(!target.classList.contains('open')) target.classList.add('open');
+      target.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 120);
+  }
+  (function initLastView(){
+    const last=readLast();
+    if(last && last.nav){
+      if(['formulas','derivations','laws'].indexOf(last.nav.mode)!==-1) state.mode=last.nav.mode;
+      if(['11','12'].indexOf(String(last.nav.cls))!==-1) state.cls=String(last.nav.cls);
+      if(['physics','chemistry','math'].indexOf(last.nav.subject)!==-1) state.subject=last.nav.subject;
+    }
+    restoreChapterFor(state.mode, state.cls, state.subject);
+    syncSegments();
+  })();
 
   themeToggle.addEventListener('click', ()=>{
     const html = document.documentElement;
@@ -353,14 +413,15 @@
     );
   }
 
-  function getChaptersFor(cls, subject){
-    const src = state.mode === 'formulas' ? DATA : (state.mode === 'derivations' ? DERIVATIONS : LAWS);
+  function getChaptersFor(cls, subject, mode){
+    const m = mode || state.mode;
+    const src = m === 'formulas' ? DATA : (m === 'derivations' ? DERIVATIONS : LAWS);
     return src.filter(d=>d.cls===cls && d.subject===subject).map(d=>d.chapter);
   }
 
   function renderChips(){
     const chapters = getChaptersFor(state.cls, state.subject);
-    let html = '<button class="chip'+(state.chapter==="all"?" active":"")+'" data-chapter="all">All chapters</button>';
+    let html = '';
     chapters.forEach(ch=>{
       html += '<button class="chip'+(state.chapter===ch?" active":"")+'" data-chapter="'+ch.replace(/"/g,'&quot;')+'">'+ch+'</button>';
     });
@@ -374,7 +435,7 @@
     let html = '';
     let count = 0;
     const chaptersData = DATA.filter(d=>d.cls===state.cls && d.subject===state.subject &&
-      (state.chapter==="all" || d.chapter===state.chapter));
+      d.chapter===state.chapter);
 
     if(chaptersData.length === 0){
       html = '<div class="empty-state"><h3>Nothing here yet</h3><p>Try a different chapter or subject.</p></div>';
@@ -461,7 +522,7 @@
     let html = '';
     let count = 0;
     const chaptersData = LAWS.filter(d=>d.cls===state.cls && d.subject===state.subject &&
-      (state.chapter==="all" || d.chapter===state.chapter));
+      d.chapter===state.chapter);
 
     if(chaptersData.length === 0){
       html = '<div class="deriv-note">No curated named laws for this selection yet — many chapters (like most of Organic Chemistry, or Application of Derivatives in Math) are built on techniques and formulas rather than a single named law. Try Physics or Chemistry, Class 11 or 12, for the fullest coverage.</div>';
@@ -485,7 +546,7 @@
     let html = '';
     let count = 0;
     const chaptersData = DERIVATIONS.filter(d=>d.cls===state.cls && d.subject===state.subject &&
-      (state.chapter==="all" || d.chapter===state.chapter));
+      d.chapter===state.chapter);
 
     if(chaptersData.length === 0){
       html = '<div class="deriv-note">No curated derivations for this selection yet — this app prioritises CBSE-board and JEE-critical derivations rather than covering every formula, since many (like Ohm\'s Law or F=ma) are definitions or postulates rather than derived results. Try Class 12 for more coverage, or switch back to Formulas.</div>';
@@ -519,12 +580,15 @@
     document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     state.mode = btn.dataset.mode;
-    state.chapter = 'all';
     state.query = '';
     searchInput.value = '';
     clearBtn.classList.remove('show');
     searchInput.placeholder = 'Search everything — formulas, derivations & laws (typo-friendly)…';
+    restoreChapterFor(state.mode, state.cls, state.subject);
+    _scrollPending = true;
     renderAll();
+    writeLast();
+    scrollToItem();
   });
 
   document.getElementById('classSeg').addEventListener('click', e=>{
@@ -533,8 +597,11 @@
     document.querySelectorAll('#classSeg button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     state.cls = btn.dataset.class;
-    state.chapter = 'all';
+    restoreChapterFor(state.mode, state.cls, state.subject);
+    _scrollPending = true;
     renderAll();
+    writeLast();
+    scrollToItem();
   });
 
   document.getElementById('subjectSeg').addEventListener('click', e=>{
@@ -543,24 +610,42 @@
     document.querySelectorAll('#subjectSeg button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     state.subject = btn.dataset.subject;
-    state.chapter = 'all';
+    restoreChapterFor(state.mode, state.cls, state.subject);
+    _scrollPending = true;
     renderAll();
+    writeLast();
+    scrollToItem();
   });
 
   chapterChips.addEventListener('click', e=>{
     const btn = e.target.closest('.chip');
     if(!btn) return;
     state.chapter = btn.dataset.chapter;
+    const last=readLast();
+    const ck=lastKey();
+    state.item = last && last.items ? (last.items[ck+'|'+state.chapter]||null) : null;
     renderChips();
     renderCards();
+    restoreOpenItem();
+    writeLast();
   });
+
+  function toggleAccordion(accordion){
+    const opening=!accordion.classList.contains('open');
+    accordion.classList.toggle('open');
+    if(opening){
+      const titleEl=accordion.querySelector('.deriv-title');
+      state.item=titleEl?titleEl.textContent.trim():null;
+      writeLast();
+    }
+  }
 
   grid.addEventListener('click', e=>{
     if(e.target.closest('.card-btn')) return;
     const dhead = e.target.closest('.deriv-head');
     if(dhead){
       const accordion = dhead.closest('.deriv-card, .law-card');
-      if(accordion) accordion.classList.toggle('open');
+      if(accordion) toggleAccordion(accordion);
       return;
     }
     const card = e.target.closest('.card-outer');
@@ -573,7 +658,7 @@
     if(dhead){
       e.preventDefault();
       const accordion = dhead.closest('.deriv-card, .law-card');
-      if(accordion) accordion.classList.toggle('open');
+      if(accordion) toggleAccordion(accordion);
       return;
     }
     const card = e.target.closest('.card-outer');
@@ -608,5 +693,7 @@
     onRender: function(cb){ renderHooks.push(cb); },
     strip: function(s){ return String(s).replace(/<[^>]*>/g,''); }
   };
+  renderHooks.push(restoreOpenItem);
   renderAll();
+  scrollToItem();
 })();
