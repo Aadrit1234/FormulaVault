@@ -1,0 +1,23 @@
+{
+  "name": "primary",
+  "version": "1.0.0",
+  "description": "A fast, offline-first study app for **CBSE Class 11/12** and **JEE Main & Advanced**. Vault AI helps you memorise **833 formula cards** — formulas, derivations and laws — across **62 chapters** of Physics, Chemistry and Mathematics, with a typo-tolerant universal search and a specialised, API-key-powered teaching tutor.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aadrit1234/FormulaVault.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Aadrit1234/FormulaVault/issues"
+  },
+  "homepage": "https://github.com/Aadrit1234/FormulaVault#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
